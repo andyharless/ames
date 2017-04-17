@@ -18,7 +18,7 @@ pseudo-continous, and transform them as necessary.
 (OK, if the dataset contains data on the kitchen sink, I'll include that too.)
 Use performance on the cross-validation set to choose a LASSO parameter.
 6. Repeat the process (including creation of a new continuous neighborhood variable)
-on the primary testing plus plus cross-validation data, using the chosen LASSO parameter.
+on the primary training data plus cross-validation data, using the chosen LASSO parameter.
 Test resulting model on initial testing set.  If it performs OK,
 repeat the process on the whole official training set, predict on the official test set,
 and submit the result as an initial Kaggle entry.
