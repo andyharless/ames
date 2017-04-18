@@ -1,0 +1,79 @@
+MSSubClass: make continuous using dummy coefficients	
+MSZoning: 7 dummies
+LotFrontage: already continuous
+LotArea: already continuous (take log?)
+Street: 1 dummy
+Alley: 2 dummies
+LotShape: recode to pseudocontinuous
+LandContour: 3 dummies
+Utilities: recode to pseudocontinuous
+LotConfig: 4 dummies
+LandSlope: 2 dummies
+Neighborhood: make continuous using dummy coefficients
+Condition1: make continuous using dummy coefficients
+Condition2: make continuous using dummy coefficients
+BldgType: 4 dummies
+HouseStyle: 7 dummies
+OverallQual: use pseudocontinuous
+OverallCond: use pseudocontinuous
+YearBuilt: already continuous
+YearRemodAdd: already continuous
+RoofStyle: 5 dummies
+RoofMatl: 7 dummies
+Exterior1st: make continuous using dummy coefficients
+Exterior2nd: make continuous using dummy coefficients (or use those from Exterior1st)
+MasVnrType: 4 dummies
+MasVnrArea: already continuous
+ExterQual: recode to pseudocontinuous 
+ExterCond: recode to pseudocontinuous
+Foundation: 5 dummies
+BsmtQual: 1 dummy plus recode to continuous using guessed category medians
+BsmtCond: recode to pseudocontinuous
+BsmtExposure: recode to pseudocontinuous
+BsmtFinType1: recode to pseudocontinuous
+BsmtFinSF1: already continuous
+BsmtFinType2: recode to pseudocontinuous
+BsmtFinSF2: already continuous
+BsmtUnfSF: already continuous
+TotalBsmtSF: already continuous
+Heating: 5 dummies
+HeatingQC: recode to pseudocontinuous
+CentralAir: 1 dummy
+Electrical: 4 dummies
+1stFlrSF: already continuous (take log)
+2ndFlrSF: already continuous
+LowQualFinSF: already continuous
+GrLivArea: already continuous (take log)
+BsmtFullBath: use pseudocontinuous
+BsmtHalfBath: use pseudocontinuous
+FullBath: use pseudocontinuous
+HalfBath: use pseudocontinuous
+Bedroom: use pseudocontinuous
+Kitchen: use pseudocontinuous
+KitchenQual: recode to pseudocontinuous
+TotRmsAbvGrd: use pseudocontinuous
+Functional: recode to pseudocontinuous
+Fireplaces:  use pseudocontinuous
+FireplaceQu: recode to pseudocontinuous
+GarageType: 6 dummies
+GarageYrBlt: use pseudocontinuous
+GarageFinish: 3 dummies
+GarageCars: use pseudocontinuous
+GarageArea: use pseudocontinuous
+GarageQual: recode to pseudocontinuous
+GarageCond: recode to pseudocontinuous
+PavedDrive: recode to pseudocontinuous
+WoodDeckSF: already continuous
+OpenPorchSF: already continuous
+EnclosedPorch: already continuous
+3SsnPorch: already continuous
+ScreenPorch: already continuous
+PoolArea: already continuous
+PoolQC: recode to pseudocontinuous
+Fence: 4 dummies
+MiscFeature: 5 dummies
+MiscVal: already continuous
+MoSold: have to think about this
+YrSold: have to think about this
+SaleType: 9 dummies
+SaleCondition: 5 dummies
