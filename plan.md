@@ -16,9 +16,12 @@ pseudo-continous, and transform them as necessary.
 (Transformations to be done on the full data set, to avoid duplication of effort.)
 5. Standardize variables and run a LASSO regression with everything but the kitchen sink.
 (OK, if the dataset contains data on the kitchen sink, I'll include that too.)
-Use performance on the cross-validation set to choose a LASSO parameter.
+~~Use performance on the cross-validation set to choose a LASSO parameter.~~
+So it occurs to me that LASSO will probably do its own cross-validation (k-fold?).
+I'll try several methods (LASSO, Ridge, &c) and use by CV set to choose one. 
 6. Repeat the process (including creation of a new continuous neighborhood variable)
-on the primary training data plus cross-validation data, using the chosen LASSO parameter.
+on the primary training data plus cross-validation data, 
+using the chosen ~~LASSO parameter~~ regularization method.
 Test resulting model on initial testing set.  If it performs OK,
 repeat the process on the whole official training set, predict on the official test set,
 and submit the result as an initial Kaggle entry.
