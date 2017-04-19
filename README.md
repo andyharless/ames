@@ -10,5 +10,9 @@ OK, so I submitted [my first Kaggle entry](https://www.kaggle.com/aharless).  Pl
 - I'm working on a single 2013-vintage MacBook Pro, can't compete with massive parallelism, and had to discard some fitting options because they're too slow
 - The most successful models in this competition don't do dramatically better than typical entries
 
+## Salient Features of My Approach
+1. Force macro variable (OFHEO WNC house price index) to be included (by using it to normalize the target variable and then including it as a predictor, thus preventing algorithms from excluding it, as they might if it were only a predictor).
+2. Use logarithms for continuous variables that can't go to zero (e.g. square feet of living space).
+3. Recode many-valued categorical variables as continuous by taking coefficients from their dummies in an otherwise sparse OLS.
 
 Here's [my original plan](plan.md) FWIW.
