@@ -1,7 +1,7 @@
 # ames
 Kaggle House Prices Competition
 
-OK, so I submitted my first Kaggle entry.  Placed in the bottom half, but I don't feel too bad about that, because
+OK, so I submitted [my first Kaggle entry](https://www.kaggle.com/aharless).  Placed in the bottom half, but I don't feel too bad about that, because
 - It was my very first entry
 - I intentionally limited myself to linear models on the first try, even after seeing that others had had more success with tree models
 - I didn't make any attempts to tune fitting algorithms, just chose the one with the best off-the-shelf results
