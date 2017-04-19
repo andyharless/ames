@@ -7,6 +7,7 @@ OK, so I submitted my first Kaggle entry.  Placed in the bottom half, but I don'
 - I didn't make any attempts to tune fitting algorithms, just chose the one with the best off-the-shelf results
 - I didn't bother to use an ensemble of models or fitting methods, just chose my favorite from the linear options
 - I cut corners in the interest of getting it done: e.g. treat ordered data as continuous without any attempt to find the right ratios
+- I'm working on a single 2013-vintage MacBook Pro, can't compete with massive parallelism, and had to discard some fitting options because they're too slow
 - The most successful models in this competition don't do dramatically better than typical entries
 
 
