@@ -1,4 +1,11 @@
 # ames
 Kaggle House Prices Competition
 
-Here's [what I'm figuring to do](plan.md)
+OK, so I submitted my first Kaggle entry.  Placed in the bottom half, but I don't feel too bad about that, because
+- It was my very first entry
+- I intentionally limited myself to linear models on the first try, even after seeing that others had had more success with tree models
+- I cut corners in the interest of getting it done: e.g. treat ordered data as continuous without making any attempt to find the right ratios
+- The most successful models in this competition don't do dramatically better than typical entries
+
+
+Here's [my originsl plan](plan.md) FWIW.
