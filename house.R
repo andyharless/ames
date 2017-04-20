@@ -355,7 +355,7 @@ rmse(da4$RelPrice, p)
 
 
 
-# REDO ANALYSIS WITH FULL OFFICIAL TEST SET
+# REDO ANALYSIS WITH FULL OFFICIAL TRAINING SET
 
 # Make working copy of data
 da5 <- data1
