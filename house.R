@@ -5,7 +5,8 @@ library(Metrics)
 
 # READ IN DATA
 
-data1 <- read.csv("train.csv", na.strings="")
+fulltrain <- read.csv("train.csv", na.strings="")
+data1 <- fulltrain
 ofheo <- read.csv("ofheowncnsa.csv")
 data1 <- merge(data1, ofheo, by.x=c("YrSold","MoSold"), by.y=c("Year","Month"))
 
@@ -39,7 +40,7 @@ data1$HasBasement = ifelse( data1$BsmtQual=="NA", 0, 1 )
 # Function to recode levels to numeric in specified order and add ".n" to name
 recode <- function( df, var, lev ) { 
   to <- as.character( 0:(length(lev)-1) )
-  newvar <- as.numeric( mapvalues( df[[var]], from=lev, to=to ) )
+  newvar <- as.numeric( as.character( mapvalues( df[[var]], from=lev, to=to) ) )
   newname <- paste0(var,".n")
   df <- cbind( df, newvar )
   names(df)[ncol(df)] <- newname
@@ -229,7 +230,8 @@ basepred <- predict( baselm, validate, type="response")
 prediction[is.na(prediction)] <- basepred[is.na(prediction)]
 
 # RMSE
-rmse(da2$RelPrice,prediction)
+print( rmse(da2$RelPrice,prediction) )
+invisible( readline( prompt="Press [enter] to continue" ) )
 
 
 
@@ -237,13 +239,15 @@ rmse(da2$RelPrice,prediction)
 
 fo = "RelPrice ~  MSZoning + HasLotFrontage + LotFrontage + LotArea + LandSlope "
 fo = paste0(fo, "+ BldgType + HouseStyle + OverallQual + OverallCond + YearBuilt ")
+fo = paste0(fo, "+ YearRemodAdd ")
 fo = paste0(fo, "+ RoofMatl + Foundation + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF ")
 fo = paste0(fo, "+ HasBasement + CentralAir + Ln1stFlrSF + X2ndFlrSF + LowQualFinSF ")
 fo = paste0(fo, "+ LnLivArea + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath ")
-fo = paste0(fo, "+ BedroomAbvGr + KitchenAbvGr + Fireplaces + GarageCars ")
+fo = paste0(fo, "+ GarageCars ")
 fo = paste0(fo, "+ ScreenPorch + PoolArea + LnOFHEO + GarageCond.n + Functional.n ")
-fo = paste0(fo, "+ LotShape.n + PoolQC.n + Neighborhood_r + MSSubClass_r ")
-fo = paste0(fo, "+ Condition1_r + Exterior1st_r + Condition2_r ")
+fo = paste0(fo, "+ BsmtFinType1.n + BsmtExposure.n + KitchenQual.n ")
+fo = paste0(fo, "+ LotShape.n + Neighborhood_r + MSSubClass_r ")
+fo = paste0(fo, "+ Condition1_r + Exterior1st_r + Condition2_r + Exterior2nd_r ")
 mymodel = lm( formula=fo, data=da )
 prediction <- predict(mymodel, da2, type="response")
 prediction[is.na(prediction)] <- basepred[is.na(prediction)]
@@ -281,6 +285,7 @@ names(predicted) <- modelnames
 bestmods <- names(sort(unlist(rmses))[1:3])
 print(bestmods)
 print(rmses[bestmods])
+invisible( readline( prompt="Press [enter] to continue" ) )
 
 
 
@@ -351,7 +356,9 @@ da4$Condition2_r[is.na(da4$Condition2_r)] = mean(da4$Condition2_r, na.rm=TRUE)
 # For now I'm going to start take my visually regularized model as a starting point
 fit <- train( as.formula(fo), data=da3, method=bestmods[1] )
 p <- predict(fit, newdata=da4)
-rmse(da4$RelPrice, p)
+print( "ESTIMATED MODEL PERFORMANCE ")
+print( rmse(da4$RelPrice, p) )
+invisible( readline( prompt="Press [enter] to continue" ) )
 
 
 
@@ -409,12 +416,13 @@ salecon = as.character(da5$SaleCondition)
 da5$SaleMisc <- ifelse( salecon=="Family" | salecon=="Partial", 1, 0 )
 da5$SaleAbnormal <- ifelse( salecon=="Abnorml", 1, 0 )
 da5$LowDownPmt <- ifelse( as.character(da5$SaleType)=="ConLD", 1, 0 )
-fo <- gsub( "+ HouseStyle ", "", fo )
-fo <- gsub( "+ LowQualFinSF ", "", fo )
-fo <- gsub( "+ MSSubClass_r ", "", fo )
-fo <- paste0(fo, "+ LandContour + LotConfig + HasGarageYr + GarageArea ")
+fo <- gsub( "+ HouseStyle ", "", fo, fixed=TRUE  )
+fo <- gsub( "+ LowQualFinSF ", "", fo, fixed=TRUE )
+fo <- gsub( "+ MSSubClass_r ", "", fo, fixed=TRUE )
+fo <- paste0(fo, "+ LandContour + LotConfig + HasGarageYr + GarageArea + X3SsnPorch ")
 fo <- paste0(fo, "+ WoodDeckSF + EnclosedPorch + LowDownPmt + LowDownPmt ")
-fo <- paste0(fo, "+ SaleMisc + SaleAbnormal + HasLotFrontage ")
+fo <- paste0(fo, "+ SaleMisc + SaleAbnormal + HeatingQC.n + GarageQual.n ")
+fo <- paste0(fo, "+ Street + Alley + MasVnrType + TotRmsAbvGrd + Fireplaces ")
 
 # Look at the OLS fit
 regmodel = lm( formula=fo, data=da5 )
@@ -518,7 +526,9 @@ print( nalist[nalist>0] )
 data2$MSSubClass_r[is.na(data2$MSSubClass_r)] = mean(data2$MSSubClass_r, na.rm=TRUE)
 data2$Exterior1st_r[is.na(data2$Exterior1st_r)] = mean(data2$Exterior1st_r, na.rm=TRUE)
 data2$Exterior2nd_r[is.na(data2$Exterior2nd_r)] = mean(data2$Exterior2nd_r, na.rm=TRUE)
-
+data2$Utilities.n[is.na(data2$Utilities.n)] = 3
+data2$Functional.n[is.na(data2$Functional.n)] = 7
+data2$KitchenQual.n[is.na(data2$KitchenQual.n)] = 3
 
 # MAKE PREDICTIONS
 
@@ -528,5 +538,5 @@ result <- data.frame( cbind( data2$Id, exp(prediction) ) )
 names(result) <- c("Id", "SalePrice")
 
 sorted_result <- result[order(result$Id),]
-write.csv(sorted_result, file="kaggleSubmission1.csv", row.names=FALSE)
+write.csv(sorted_result, file="kaggleSubmission1b.csv", row.names=FALSE)
 

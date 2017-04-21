@@ -39,7 +39,7 @@ data1$HasBasement = ifelse( data1$BsmtQual=="NA", 0, 1 )
 # Function to recode levels to numeric in specified order and add ".n" to name
 recode <- function( df, var, lev ) { 
   to <- as.character( 0:(length(lev)-1) )
-  newvar <- as.numeric( mapvalues( df[[var]], from=lev, to=to ) )
+  newvar <- as.numeric( as.character( mapvalues(df[[var]], from=lev, to=to) ) )
   newname <- paste0(var,".n")
   df <- cbind( df, newvar )
   names(df)[ncol(df)] <- newname
@@ -228,13 +228,15 @@ rmse(da2$RelPrice,prediction)
 
 fo = "RelPrice ~  MSZoning + HasLotFrontage + LotFrontage + LotArea + LandSlope "
 fo = paste0(fo, "+ BldgType + HouseStyle + OverallQual + OverallCond + YearBuilt ")
+fo = paste0(fo, "+ YearRemodAdd ")
 fo = paste0(fo, "+ RoofMatl + Foundation + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF ")
 fo = paste0(fo, "+ HasBasement + CentralAir + Ln1stFlrSF + X2ndFlrSF + LowQualFinSF ")
 fo = paste0(fo, "+ LnLivArea + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath ")
-fo = paste0(fo, "+ BedroomAbvGr + KitchenAbvGr + Fireplaces + GarageCars ")
+fo = paste0(fo, "+ GarageCars ")
 fo = paste0(fo, "+ ScreenPorch + PoolArea + LnOFHEO + GarageCond.n + Functional.n ")
-fo = paste0(fo, "+ LotShape.n + PoolQC.n + Neighborhood_r + MSSubClass_r ")
-fo = paste0(fo, "+ Condition1_r + Exterior1st_r + Condition2_r ")
+fo = paste0(fo, "+ BsmtFinType1.n + BsmtExposure.n + KitchenQual.n ")
+fo = paste0(fo, "+ LotShape.n + Neighborhood_r + MSSubClass_r ")
+fo = paste0(fo, "+ Condition1_r + Exterior1st_r + Condition2_r + Exterior2nd_r ")
 mymodel = lm( formula=fo, data=da )
 prediction <- predict(mymodel, da2, type="response")
 prediction[is.na(prediction)] <- basepred[is.na(prediction)]
@@ -306,49 +308,45 @@ e1 <- lm(
          data=preddf2)
 summary(e1)
 
-# Drop the one with the worst coefficient (lasso) and run again
+# Drop the one with the worst coefficient (svmLinear) and run again
 e2 <- lm(
-  actual~lars2+cubist+cforest+glmboost+svmRadial+svmLinear+glmnet+foba+brnn+gbm-1, 
+  actual~lars2+cubist+cforest+glmboost+svmRadial+lasso+glmnet+foba+brnn+gbm-1, 
          data=preddf2)
 summary(e2)
 
 # Drop the one with the worst coefficient (glmboost) and run again
-e3 <- lm(actual~lars2+cubist+cforest+svmRadial+svmLinear+glmnet+foba+brnn+gbm-1, 
+e3 <- lm(actual~lars2+cubist+cforest+svmRadial+lasso+glmnet+foba+brnn+gbm-1, 
          data=preddf2)
 summary(e3)
 
-# Drop the one with the worst coefficient (svmLinear) and run again
-e4 <- lm(actual~cubist+cforest+svmRadial+glmnet+lars2+foba+brnn+gbm-1, data=preddf2)
+# Drop the one with the worst coefficient (lars2) and run again
+e4 <- lm(actual~cubist+cforest+svmRadial+lasso+glmnet+foba+brnn+gbm-1, data=preddf2)
 summary(e4)
 
-# Drop the one with the worst coefficient (lars2) and run again
-e5 <- lm(actual~cubist+cforest+svmRadial+glmnet+foba+brnn+gbm-1, data=preddf2)
+# Drop the one with the worst coefficient (foba) and run again
+e5 <- lm(actual~cubist+cforest+svmRadial+glmnet+lasso+brnn+gbm-1, data=preddf2)
 summary(e5)
 
-# Drop the one with the worst coefficient (foba) and run again
-e6 <- lm(actual~cubist+cforest+svmRadial+glmnet+brnn+gbm-1, data=preddf2)
+# Drop the one with the worst coefficient (glmnet) and run again
+e6 <- lm(actual~cubist+cforest+svmRadial+lasso+brnn+gbm-1, data=preddf2)
 summary(e6)
 
-# Drop the one with the worst coefficient (glmnet) and run again
+# Drop the one with the worst coefficient (lasso) and run again
 e7 <- lm(actual~cubist+cforest+svmRadial+brnn+gbm-1, data=preddf2)
 summary(e7)
 
-# Drop the one with the worst coefficient (brnn) and run again
-e8 <- lm(actual~cubist+cforest+svmRadial+gbm-1, data=preddf2)
+# Drop the one with the worst coefficient (cubist) and run again
+e8 <- lm(actual~brnn+cforest+svmRadial+gbm-1, data=preddf2)
 summary(e8)
 
 # Result implies put almost no weight on rf
 # But if we remove the sum-to-one constraint, we get
-e9 <- lm(actual~rf+cubist+svmRadial+gbm+cforest-1, data=preddf)
+e9 <- lm(actual~rf+brnn+svmRadial+gbm+cforest-1, data=preddf)
 summary(e9)
 
-# Here's how I want to play this:
-#   We have 3 kinds of models, tree, linear fit, and SVM
-#   Both sets of coefficients imply each of the 3 should get roughly equal weight
-#   So I will use
-#     ( (rf+cforest) + (cubist+gbm) + 2*svmRadial ) / 6
+# Let's just take these 5 models and give them equal weight
 
-p = ((preddf$rf+preddf$cforest) + (preddf$cubist+preddf$gbm) + 2*preddf$svmRadial) / 6
+p = (preddf$rf + preddf$cforest + preddf$brnn + preddf$gbm + preddf$svmRadial) / 5
 rmse( da2a$RelPrice, p )
 
 
@@ -425,10 +423,10 @@ registerDoParallel(cluster)
 # ( (rf+cforest) + (cubist+gbm) + 2*svmRadial ) / 6
 modelnames = c("rf",        # Random Forest
                "cforest",   # Conditional Inference Random Forest
-               "cubist",    # Cubist Regression Tree
+               "brnn",      # Bayesian Regularized Neural Networks
                "gbm",       # Boosted Generalized Linear Model
                "svmRadial") # Support Vector Machines with Radial Basis Function Kernel
-weights = c( .166, .167, .167, .167, .333 )
+weights = c( .2, .2, .2, .2, .2 )
 modelfits = list()
 for (m in modelnames) {
   print ( paste("Training model:", m) )
@@ -514,12 +512,13 @@ salecon = as.character(da5$SaleCondition)
 da5$SaleMisc <- ifelse( salecon=="Family" | salecon=="Partial", 1, 0 )
 da5$SaleAbnormal <- ifelse( salecon=="Abnorml", 1, 0 )
 da5$LowDownPmt <- ifelse( as.character(da5$SaleType)=="ConLD", 1, 0 )
-fo <- gsub( "+ HouseStyle ", "", fo )
-fo <- gsub( "+ LowQualFinSF ", "", fo )
-fo <- gsub( "+ MSSubClass_r ", "", fo )
-fo <- paste0(fo, "+ LandContour + LotConfig + HasGarageYr + GarageArea ")
+fo <- gsub( "+ HouseStyle ", "", fo, fixed=TRUE  )
+fo <- gsub( "+ LowQualFinSF ", "", fo, fixed=TRUE )
+fo <- gsub( "+ MSSubClass_r ", "", fo, fixed=TRUE )
+fo <- paste0(fo, "+ LandContour + LotConfig + HasGarageYr + GarageArea + X3SsnPorch ")
 fo <- paste0(fo, "+ WoodDeckSF + EnclosedPorch + LowDownPmt + LowDownPmt ")
-fo <- paste0(fo, "+ SaleMisc + SaleAbnormal + HasLotFrontage ")
+fo <- paste0(fo, "+ SaleMisc + SaleAbnormal + HeatingQC.n + GarageQual.n ")
+fo <- paste0(fo, "+ Street + Alley + MasVnrType + TotRmsAbvGrd + Fireplaces ")
 
 # Look at the OLS fit
 regmodel = lm( formula=fo, data=da5 )
@@ -533,7 +532,6 @@ cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
 registerDoParallel(cluster)
 
 # Fit the models
-# ( (rf+cforest) + (cubist+gbm) + 2*svmRadial ) / 6
 modelfits = list()
 for (m in modelnames) {
   print ( paste("Training model:", m) )
@@ -639,6 +637,10 @@ print( nalist[nalist>0] )
 data2$MSSubClass_r[is.na(data2$MSSubClass_r)] = mean(data2$MSSubClass_r, na.rm=TRUE)
 data2$Exterior1st_r[is.na(data2$Exterior1st_r)] = mean(data2$Exterior1st_r, na.rm=TRUE)
 data2$Exterior2nd_r[is.na(data2$Exterior2nd_r)] = mean(data2$Exterior2nd_r, na.rm=TRUE)
+data2$Utilities.n[is.na(data2$Utilities.n)] = 3
+data2$Functional.n[is.na(data2$Functional.n)] = 7
+data2$KitchenQual.n[is.na(data2$KitchenQual.n)] = 3
+
 
 
 # MAKE PREDICTIONS
@@ -657,4 +659,5 @@ result <- data.frame( cbind( data2$Id, exp(prediction) ) )
 names(result) <- c("Id", "SalePrice")
 
 sorted_result <- result[order(result$Id),]
-write.csv(sorted_result, file="kaggleSubmission2.csv", row.names=FALSE)
+write.csv(sorted_result, file="kaggleSubmission2b.csv", row.names=FALSE)
+
