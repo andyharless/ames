@@ -3,6 +3,7 @@
 
 Others are welcome to clone/fork this repository. I request that you credit me where appropriate and inform me of outcomes from any resulting Kaggle submissions.
 
+Due to randomness, bugfixes, interactive runs, etc., correspondence between repository scripts and Kaggle submissions is only approximate, and there are more submissions then there are scripts.
 
 Files:
 
