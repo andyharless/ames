@@ -1,6 +1,9 @@
 # ames
 ## Kaggle House Prices Competition
 
+Others are welcome to clone/fork this repository. I request that you credit me where appropriate and inform me of outcomes from any resulting Kaggle submissions.
+
+
 Files:
 
 house[N].R = Primary script for main attempt N
