@@ -1,6 +1,15 @@
 # ames
 ## Kaggle House Prices Competition
 
+Files:
+
+house[N].R = Primary script for main attempt N
+
+house[N]_output.txt = console output therefrom
+
+house[N][L].R = intermediate script L after main attempt N
+
+
 OK, so I submitted [my first Kaggle entry](https://www.kaggle.com/aharless).  Placed in the bottom half, but I don't feel too bad about that, because
 - It was my very first entry
 - I intentionally limited myself to linear models on the first try, even after seeing that others had had more success with tree models
