@@ -17,14 +17,16 @@ Due to randomness, bugfixes, interactive runs, etc., correspondence between repo
 - `ofheowncnsa` = [FHFA (fka OFHEO)](https://www.fhfa.gov/DataTools/Downloads/pages/house-price-index.aspx) House Price Index data used in my analysis
 - `plan.md` = Original plan for this analysis
 
+I haven't included output CSV files in this repository, since that would proabably violate contest rules.  You can approximate them by runinng the scripts, but I offer no guarantees as to how they will run on your system or how close the output will be to my actual submissions.
+
 ## Results
 
 | Version | Description | RMSE
 ----------|-------------|-----
-| house.R | OLS for feature engnineering, GLMnet fitting model | 0.132
-| house2.R | Ensemble including nonlinear models | 0.131
-| house3.R | Ensemble with more feature engineering | 0.127
-| house4.R | Ensemble of linear models only | 0.122
+| `house.R` | OLS for feature engnineering, GLMnet fitting model | 0.132
+| `house2.R` | Ensemble including nonlinear models | 0.131
+| `house3.R` | Ensemble with more feature engineering | 0.127
+| `house4.R` | Ensemble of linear models only | 0.122
 
 Leaderboard rank 731/2389, as of 2017-04-23 18:53 GMT
 
