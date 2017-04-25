@@ -1,9 +1,12 @@
 # ames
 ## Kaggle House Prices Competition
 
+This is the repository for [my entries](https://www.kaggle.com/aharless) in the [Kaggle House Price Competition](https://www.kaggle.com/c/house-prices-advanced-regression-techniques).
+
 Others are welcome to clone/fork this repository or just copy my code. I request that you credit me where appropriate and inform me of outcomes from any resulting Kaggle submissions.
 
-Due to randomness, bugfixes, interactive runs, etc., correspondence between repository scripts and Kaggle submissions is only approximate, and there are more submissions then there are scripts.
+Due to randomness, bugfixes, interactive runs, etc., correspondence between repository scripts and Kaggle submissions is only approximate, and there are more submissions then there are scripts.  Also, the code in my related Kaggle kernels, some of which was used to produce submitted entries, may or may not correspond to what is here.  I have had to hobble some of the kernel scripts due to performance issues, so typically the best entries have been from code run on my own computer.
+
 
 ## Files:
 
