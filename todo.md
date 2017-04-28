@@ -1,0 +1,11 @@
+## Improvements to make in house price prediction
+- Implement k-fold cross-validation
+- Revise text of Kaggle notebook kernel
+- Improve the SVM (feature definition, tuning, &c)
+- Start over in Python
+- Look more closely at raw data
+- Eliminate outliers where appropriate
+- Transform skewed variables
+- Look at interaction terms
+- Notebook-ify Amit Choudhary's Python script
+- Tune parameters
