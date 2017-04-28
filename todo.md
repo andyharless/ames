@@ -1,6 +1,7 @@
 ## Improvements to make in house price prediction
 - Implement k-fold cross-validation
 - Revise text of Kaggle notebook kernel
+- Dowload and push latest Kaggle notebook kernel to here
 - Improve the SVM (feature definition, tuning, &c)
 - Start over in Python
 - Look more closely at raw data
