@@ -9,3 +9,4 @@
 - Look at interaction terms
 - Notebook-ify Amit Choudhary's Python script
 - Tune parameters
+- Reorganize this repository so top level not so crowded
