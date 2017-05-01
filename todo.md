@@ -5,9 +5,9 @@
 - Improve the SVM (feature definition, tuning, &c)
 - Start over in Python
 - Look more closely at raw data
-- Eliminate outliers where appropriate
+- Look more closely at which outliers should be dropped
 - Transform skewed variables
 - Look at interaction terms
-- Notebook-ify Amit Choudhary's Python script
+- ~Notebook-ify Amit Choudhary's Python script~
 - Tune parameters
 - Reorganize this repository so top level not so crowded
