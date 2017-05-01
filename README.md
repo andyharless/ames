@@ -13,12 +13,17 @@ Due to randomness, bugfixes, interactive runs, etc., correspondence between repo
 - `house[`N`].R` = Primary script for main attempt N (blank=1)
 - `house[`N`]_output.txt` = console output therefrom
 - `house[`N`][`L`].R` = intermediate script L after main attempt N
+- `house[`N`][`L`].Rmd` = R markdown version of R script
+- `house[`N`][`L`].md` = markdown version of R markdown script
+- `house[`N`][`L`].nb.html` = rendered version of R markdown script
+- `house[`N`][`L`].ipynb` = Jupyter notebook version of R script
 - `train.csv` = Training data from Kaggle
 - `test.csv` = Test data from Kaggle
 - `data_description.txt` = Codebook from Kaggle
 - `data_plan.xlsx` = Original plan for how to process variables
 - `ofheowncnsa` = [FHFA (fka OFHEO)](https://www.fhfa.gov/DataTools/Downloads/pages/house-price-index.aspx) House Price Index data used in my analysis
 - `plan.md` = Original plan for this analysis
+- `choudhary.ipynb` = Amit Choudhary's analysis in Python, with my annotations.
 
 I haven't included output CSV files in this repository, since that would proabably violate contest rules.  You can approximate them by runinng the scripts, but I offer no guarantees as to how they will run on your system or how close the output will be to my actual submissions.
 
@@ -31,8 +36,9 @@ I haven't included output CSV files in this repository, since that would proabab
 | `house3.R` | Ensemble with more feature engineering | 0.127
 | `house4.R` | Ensemble of linear models only | 0.122
 | `house5.R` | Average with simple SVM prediction | 0.117
+| `house6.R` | Drop outliers and change SVM parameter | 0.116
 
-Leaderboard rank 329/2334, as of 2017-04-28 07:07 GMT
+Leaderboard rank 185/2287, as of 2017-05-01 02:45 GMT
 
 ## Salient Features of My Approach
 1. Force macro variable (OFHEO WNC house price index) to be included (by using it to normalize the target variable before including it as a predictor, thus preventing algorithms from excluding it, as they might have if it were *only* a predictor).
