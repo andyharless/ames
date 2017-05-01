@@ -37,8 +37,9 @@ I haven't included output CSV files in this repository, since that would proabab
 | `house4.R` | Ensemble of linear models only | 0.122
 | `house5.R` | Average with simple SVM prediction | 0.117
 | `house6.R` | Drop outliers and change SVM parameter | 0.116
+| `house7.R` | Average house6 result with Choudhary model | 0.112
 
-Leaderboard rank 185/2287, as of 2017-05-01 02:45 GMT
+Leaderboard rank 30/2178, as of 2017-05-01 17:58 GMT
 
 ## Salient Features of My Approach
 1. Force macro variable (OFHEO WNC house price index) to be included (by using it to normalize the target variable before including it as a predictor, thus preventing algorithms from excluding it, as they might have if it were *only* a predictor).
