@@ -1,5 +1,7 @@
 running_as_kaggle_kernel = FALSE
-pretending_to_run_as_kaggle_kernel = TRUE
+pretending_to_run_as_kaggle_kernel = FALSE
+
+# Compared to house5:  changed SVM parameter and deleted outliers from linear version
 
 library(plyr)
 library(caret)
@@ -539,7 +541,7 @@ ofheo <- data.frame( Month, Year, OFHEO )
 # READ IN AND CLEAN DATA
 
 rawdata <- read.csv(trainfile, na.strings="")
-data1 <- rawdata[rawdata$GrLivArea<=5000,]  # Reomve outliers from training data
+data1 <- rawdata[rawdata$GrLivArea<=4000,]  # Reomve outliers from training data
 data1 <- merge(data1, ofheo, by.x=c("YrSold","MoSold"), by.y=c("Year","Month"))
 data1 <- cleanData( data1 )
 
@@ -866,7 +868,6 @@ sorted_result <- result[order(result$Id),]
 ###################################################################################
 
 train <- read.csv(trainfile, stringsAsFactors = F)
-train <- train[train$GrLivArea<=5000,]  # Reomve outliers from training data
 
 test <- read.csv(testfile, stringsAsFactors = F)
 price = train[,c("SalePrice")]
@@ -876,9 +877,9 @@ simpledf <- rbind(train[,-81], test)
 simpletrain <- deal_missing(simpledf)
 sdf = simpletrain
 
-sdftrain = sdf[1:1459,]
+sdftrain = sdf[1:1460,]
 sdftrain = cbind(sdftrain,price)
-sdftest = sdf[1460:2918,]
+sdftest = sdf[1461:2919,]
 sdftrain = sdftrain[,-1]
 id = sdftest[,1]
 sdftest = sdftest[,-1]
@@ -902,4 +903,4 @@ colnames(svmResult) = c("Id","SalePrice")
 final_answer <- exp (   ( log(sorted_result$SalePrice) + log(svmResult[,"SalePrice"]) ) / 2   )
 final_result <- data.frame( cbind( sorted_result$Id, final_answer ) )
 names(final_result) <- c("Id", "SalePrice")
-write.csv(final_result, file="kaggleSubmission5d.csv", row.names=FALSE)
+write.csv(final_result, file="kaggleSubmission6.csv", row.names=FALSE)
