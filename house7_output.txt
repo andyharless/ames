@@ -1,0 +1,1625 @@
+
+> sink(con, append=TRUE, type="message")
+
+> # This will echo all input and not truncate 150+ character lines...
+> source("house7.R", echo=TRUE, max.deparse.length=10000)
+
+> running_as_kaggle_kernel = FALSE
+
+> pretending_to_run_as_kaggle_kernel = FALSE
+
+> # house7 compared to house6:  average final result with Choudhary model result
+> #                             (Choudhary result from python script in choudhary.ipynb,
+> #                              read in from output file output.csv)
+> 
+> # house6 compared to house5:  changed SVM parameter & deleted outliers from linear version
+> 
+> 
+> library(plyr)
+
+> library(caret)
+Loading required package: lattice
+Loading required package: ggplot2
+Use suppressPackageStartupMessages() to eliminate package startup messages.
+
+> library(Metrics)
+
+> library(parallel)
+
+> library(doParallel)
+Loading required package: foreach
+foreach: simple, scalable parallel programming from Revolution Analytics
+Use Revolution R for scalability, fault tolerance and more.
+http://www.revolutionanalytics.com
+Loading required package: iterators
+
+> library(ggplot2) # Data visualization
+
+> library(readr) # CSV file I/O, e.g. the read_csv function
+
+> library(Amelia)
+Loading required package: Rcpp
+## 
+## Amelia II: Multiple Imputation
+## (Version 1.7.4, built: 2015-12-05)
+## Copyright (C) 2005-2017 James Honaker, Gary King and Matthew Blackwell
+## Refer to http://gking.harvard.edu/amelia/ for more information
+## 
+
+> library(mice)
+
+> library(lattice)
+
+> library(rpart)
+
+> library(xgboost)
+
+> library(e1071)
+
+> modelnames = c("lars2",     # Least Angle Regression
++                "cubist",    # Cubist Regression Tree
++                "glmboost",  # Boosted Generalized Linear Model
++                "glmnet",    # Generalized linear model via penalized maximum likelihood
++                "lasso",     # Least absolute shrinkage & selection operator (L1 penalty)
++                "bayesglm",  # Bayesian Generalized Linear Model
++                "ridge",     # Ridge Regression (L2 penalty)
++                "xgbLinear", # eXtreme Gradient Boosting, linear method
++                "nnls",      # Non-Negative Least Squares
++                "icr",       # Independent Component Regression
++                "gbm")       # Stochastic Gradient Boosting
+
+> too_slow <- c("xgbLinear", "cubist", "gbm")
+
+> if (running_as_kaggle_kernel) {
++   trainfile <- "../input/train.csv"
++   testfile <- "../input/test.csv"
++   keep = ! (modelnames %in% too_slow)
++   modelnames <- modelnames[ keep ]
++ } else {
++   trainfile <- "train.csv"
++   testfile <- "test.csv"
++ }
+
+> if (pretending_to_run_as_kaggle_kernel) {
++   keep = ! (modelnames %in% too_slow)
++   modelnames <- modelnames[ keep ]
++ }
+
+> # PRELIMINARIES I.  FUNCTIONS
+> 
+> # Function to recode levels to numeric in specified order and add ".n" to name
+> recode <- function( df, var, lev ) { 
++   to <- as.character( 0:(length(lev)-1) )
++   newvar <- as.numeric( as.character( mapvalues(df[[var]], from=lev, to=to) ) )
++   newname <- paste0(var,".n")
++   df <- cbind( df, newvar )
++   names(df)[ncol(df)] <- newname
++   df[var] <- NULL
++   df
++ }
+
+> # Function to do initial data cleaning
+> cleanData <- function( df ) {
++   # Convert pseudo-numeric "type of dwelling" identifier to a factor
++   df$MSSubClass <- as.factor( df$MSSubClass )
++ 
++   # Deal with numeric variables that have missing values
++   df$LotFrontage = as.character( df$LotFrontage )
++   df$HasLotFrontage = ifelse( df$LotFrontage=="NA", 0, 1 )
++   df$LotFrontage = ifelse( df$LotFrontage=="NA", "0", df$LotFrontage ) 
++   df$LotFrontage = as.numeric( df$LotFrontage )
++ 
++   df$MasVnrArea = as.character( df$MasVnrArea )
++   df$HasMasVnr = ifelse( df$MasVnrArea=="NA", 0, 1 )
++   df$MasVnrArea = ifelse( df$MasVnrArea=="NA", "0", df$MasVnrArea ) 
++   df$MasVnrArea = as.numeric( df$MasVnrArea )
++ 
++   df$GarageYrBlt = as.character( df$GarageYrBlt )
++   df$HasGarageYr = ifelse( df$GarageYrBlt=="NA", 0, 1 )
++   df$GarageYrBlt = ifelse( df$GarageYrBlt=="NA", "0", df$GarageYrBlt ) 
++   df$GarageYrBlt = as.numeric( df$GarageYrBlt )
++ 
++   # Dummy for "has basement"
++   df$HasBasement = ifelse( df$BsmtQual=="NA", 0, 1 )
++ 
++   # Recode ordered factors as pseudo-continuous numerical variables
++   qualcats  = c( "Po",  "Fa",  "TA",   "Gd",   "Ex" )
++   qualcats2 = c( "NA",  qualcats )
++   funcats   = c( "Sal", "Sev", "Maj2", "Maj1", "Mod", "Min2", "Min1", "Typ" )
++   basecats  = c( "NA",  "Unf", "LwQ",  "Rec",  "BLQ", "ALQ",  "GLQ"         )
++   df <- recode( df, "ExterCond",    qualcats  )
++   df <- recode( df, "ExterQual",    qualcats  )
++   df <- recode( df, "HeatingQC",    qualcats  )
++   df <- recode( df, "KitchenQual",  qualcats  )
++   df <- recode( df, "BsmtCond",     qualcats2 )
++   df <- recode( df, "FireplaceQu",  qualcats2 )
++   df <- recode( df, "GarageQual",   qualcats2 )
++   df <- recode( df, "GarageCond",   qualcats2 )
++   df <- recode( df, "Functional",   funcats   )
++   df <- recode( df, "BsmtFinType1", basecats  )
++   df <- recode( df, "BsmtFinType2", basecats  )
++   df <- recode( df, "PavedDrive",   c("N",   "P",      "Y"                     ) )                                         
++   df <- recode( df, "Utilities",    c("ELO", "NoSeWa", "NoSewr", "AllPub"      ) )
++   df <- recode( df, "LotShape",     c("IR3", "IR2",    "IR1",    "Reg"         ) )                                         
++   df <- recode( df, "BsmtExposure", c("NA",  "No",     "Mn",     "Av",    "Gd" ) )
++   df <- recode( df, "PoolQC",       c("NA",  "Fa",     "TA",     "Gd",    "Ex" ) )
++   df <- recode( df, "GarageFinish", c("NA",  "Unf",    "RFn",    "Fin"         ) )
++ 
++   # BsmtHeight needs special treatment, since it's really a categorized continuous variable
++   from <- c("NA", "Po", "Fa", "TA", "Gd", "Ex"  ) 
++   to   <- c("0",  "50", "75", "85", "95", "120" )                                          
++   df$BsmtHeight <- as.numeric( mapvalues(df$BsmtQual, from=from, to=to) )
++   df$BsmtQual <- NULL
++ 
++   # Fix numeric variables that will get read as factors in test set
++   df$BsmtFinSF1 = as.numeric( as.character( df$BsmtFinSF1 ) )
++   df$BsmtFinSF1[is.na(df$BsmtFinSF1)] = mean(df$BsmtFinSF1, na.rm=TRUE)
++   df$BsmtFinSF2 = as.numeric( as.character( df$BsmtFinSF2 ) )
++   df$BsmtFinSF2[is.na(df$BsmtFinSF2)] = mean(df$BsmtFinSF2, na.rm=TRUE)
++   df$BsmtUnfSF = as.numeric( as.character( df$BsmtUnfSF ) )
++   df$BsmtUnfSF[is.na(df$BsmtUnfSF)] = mean(df$BsmtUnfSF, na.rm=TRUE)
++   df$BsmtFullBath = as.numeric( as.character( df$BsmtFullBath ) )
++   df$BsmtFullBath[is.na(df$BsmtFullBath)] = mean(df$BsmtFullBath, na.rm=TRUE)
++   df$BsmtHalfBath = as.numeric( as.character( df$BsmtHalfBath ) )
++   df$BsmtHalfBath[is.na(df$BsmtHalfBath)] = mean(df$BsmtHalfBath, na.rm=TRUE)
++   df$GarageCars = as.numeric( as.character( df$GarageCars ) )
++   df$GarageCars[is.na(df$GarageCars)] = mean(df$GarageCars, na.rm=TRUE)
++   df$GarageArea = as.numeric( as.character( df$GarageArea ) )
++   df$GarageArea[is.na(df$GarageArea)] = mean(df$GarageArea, na.rm=TRUE)
++   
++   # Fix missing values
++   df$Utilities.n[is.na(df$Utilities.n)] = 3       # Modal value
++   df$Functional.n[is.na(df$Functional.n)] = 7     # Modal value
++   df$KitchenQual.n[is.na(df$KitchenQual.n)] = 3   # Modal value
++   df$Electrical[df$Electrical=="NA"] = as.factor("SBrkr")
++   
++   # Take logarithms where appropriate
++   df$X1stFlrSF = log( df$X1stFlrSF )
++   names(df)[names(df)=="X1stFlrSF"] <- "Ln1stFlrSF"
++   df$GrLivArea = log( df$GrLivArea )
++   names(df)[names(df)=="GrLivArea"] <- "LnLivArea"
++   df$OFHEO = log( df$OFHEO )
++   names(df)[names(df)=="OFHEO"] <- "LnOFHEO"
++ 
++   # Normalize dependant variable (if this is a training set)  
++   if (!is.null(df$SalePrice)) {
++     df$SalePrice = log( df$SalePrice ) - df$LnOFHEO 
++     names(df)[names(df)=="SalePrice"] <- "RelPrice"
++   }
++ 
++   df
++ }
+
+> # Function to get coefficients to be used to make factor continuous given baseline model
+> getCoeffs <- function( df, basemodel, factor ) {
++   mod <- paste0( basemodel, "+", factor, "-1" )
++   lm <- lm(formula=mod, data=df)
++   fnames <- grep( factor, names(lm$coefficients), fixed=TRUE )
++   lm$coefficients[fnames]
++ }
+
+> # Function to make factor continuous (given dummy coefficients) and add "_r" to name
+> makeContinuous <- function( df, factor, coeffs ) {
++   outvar <- 0*(1:nrow(df))
++   fact <- df[[factor]]
++   for ( n in levels(fact) ) {
++      outvar[fact==n] <- coeffs[paste0(factor,n)]
++   }   
++   df <- cbind( df, outvar )  
++   names(df)[ncol(df)] <- paste0( factor, "_r" )
++   df[factor] <- NULL
++   df
++ }
+
+> # Function to convert integer variable to above/below dummies for each of its values
+> dummify <- function( df, var ) { 
++   v <- df[[var]]
++   vals <- sort( unique(v) )
++   n <- length(vals) - 1
++   if (n==0) { return (NULL) }
++   for (i in vals[1:n]) {
++     newname <- paste0(var,".gt",as.character(i))
++     newvar <- as.numeric(v > i)
++     df <- cbind( df, newvar )
++     names(df)[ncol(df)] <- newname
++   }
++   df
++ }
+
+> # Function to add to model any of the created dummies that have positive coefficients
+> addDummiesToModel <- function( df, var, mod ) {
++   vars <- c()
++   for (name in names(df)) {
++     if ( grepl(paste0(var,".gt"), name, fixed=TRUE) ) {
++       vars <- c(vars,name)
++     }
++   }
++   newmod <- paste0( mod, " + ", paste(vars, collapse=" + ") )
++   lmfull <- lm( formula=newmod, data=df )
++   count = length(vars)
++   for (var in vars) {
++     if ( is.na( lmfull$coefficients[var] ) ) {
++       print( paste0( "Variable ", var, " removed due to rank deficiency"))
++       newmod <- gsub( paste0(" + ",var), "", newmod, fixed=TRUE )
++       count = count - 1
++     }
++     else if ( lmfull$coefficients[var] < 0 ) {
++       newmod <- gsub( paste0(" + ",var), "", newmod, fixed=TRUE )
++       count = count - 1
++     }
++   }
++   if (count==0) { return(NULL) }
++   newmod
++ }
+
+> # Function to get coefficients to be used to make ordered variable continuous
+> #   (given a model that includes any dummies found to have positive coefficients)
+> getOrderedCoeffs <- function( df, newmod, var ) {
++   lm1 <- lm(formula=newmod, data=df)
++   fnames <- grep( var, names(lm1$coefficients), fixed=TRUE )
++   coeffs <- lm1$coefficients[fnames]
++   names(coeffs) <- gsub( paste0(var,".gt"), "", names(coeffs), fixed=TRUE )
++   coeffs
++ }
+
+> # Function to make ordered variable continuous (given coefficients) and add "_r" to name
+> makeOrderedContinuous <- function( df, var, coeffs ) {
++   outvar <- 0*(1:nrow(df))
++   v <- df[[var]]
++   outvar <- 0
++   for (n in names(coeffs)) {
++     outvar <- outvar + ifelse( v>as.numeric(n), coeffs[n], 0 )
++   }
++   df <- cbind( df, outvar )  
++   names(df)[ncol(df)] <- paste0( var, "_r" )
++   df[var] <- NULL
++   df
++ }
+
+> # Function to make coefficients to be used to make ordered variable continuous
+> makeOrderedCoeffs <- function( df, mod, var ) {
++   df <- dummify( df, var )
++   if (is.null(df)) { 
++     print( paste0("dummify returned NULL for ", var) )
++     return(NULL) 
++   }
++   mod <- addDummiesToModel( df, var, mod )
++   if (is.null(mod)) {
++     print("addDummiesToModel returned NULL")
++     return(NULL) 
++   }
++   coeffs <- getOrderedCoeffs( df, mod, var )
++   if (is.null(coeffs)) {
++     print("getOrderedCoeffs returned NULL")
++     return(NULL) 
++   }
++   coeffs
++ }
+
+> # Function to make a bunch of ordered variables continuous using functions above
+> makeOrderedVariablesContinuous <- function(df, mod, varlist) {
++ 
++   # Note: Ordered variables should be defined so that positive coefficients are expected
++ 
++   # Start with a baseline model.  For each ordered variable (in sequence, so it matters
++   #   how the variables are arranged in the variable list), create above/below dummies
++   #   for each level.  Delete any dummies with wrong sign.  Use OLS coefficients on
++   #   remaining dummies to define a continuous version of the ordered variable. 
++   
++   # "OverallQual" and "OverallCond" need special treatment because they are already
++   #    in the baseline model so must be removed before adding corresponding dummies.
++   already_in_baseline_model <- c("OverallQual", "OverallCond")
++   
++   orderedCoeffs <- list() # List that will contain coefficients for ordered variables
++   varsToDrop <- c() # List that will contain variable names dropped because all wrong sign
++   i <- 0 
++   for ( var in varlist ) {
++     if ( var %in% already_in_baseline_model ) {
++       mod <- gsub( paste0("+ ", var), "", mod, fixed=TRUE ) # Delete from model
++     } 
++     co <- makeOrderedCoeffs( df, mod, var )
++     if ( is.null(co) ) {
++       varsToDrop <- c(varsToDrop, var)
++       df[var] <- NULL
++     }
++     else {
++       df <- makeOrderedContinuous( df, var, co )
++       mod <- paste0( mod, " + ", var, "_r")
++       i <- i + 1
++       orderedCoeffs[[i]] <- co
++       names(orderedCoeffs)[[i]] <- var
++     }
++   }
++   output <- list( df, mod, orderedCoeffs, varsToDrop )
++   names(output) <- c("df", "mod", "coeffs", "drop")
++   output
++ }
+
+> # Function to do final data cleaning after variables have been processed into features
+> finalCleaning <- function( df ) {
++ 
++   # Fix numeric variables with missing values in test and/or validation set
++   df$MSSubClass_r[is.na(df$MSSubClass_r)] = mean(df$MSSubClass_r, na.rm=TRUE)
++   df$Exterior1st_r[is.na(df$Exterior1st_r)] = mean(df$Exterior1st_r, na.rm=TRUE)
++   df$Exterior2nd_r[is.na(df$Exterior2nd_r)] = mean(df$Exterior2nd_r, na.rm=TRUE)
++   df$Condition2_r[is.na(df$Condition2_r)] = mean(df$Condition2_r, na.rm=TRUE)
++   
++   # Collapse sale condition categories
++   salecon <- as.character(df$SaleCondition)
++   df$SaleMisc <- ifelse( salecon=="Family" | salecon=="Partial", 1, 0 )
++   df$SaleAbnormal <- ifelse( salecon=="Abnorml", 1, 0 )
++   df$SaleCondition <- NULL
++ 
++   # Collapse sale type categories
++   st <- as.character(df$SaleType)
++   con <- c("Con", "ConLw", "ConLI", "ConLD")
++   wd <- c("WD", "CWD", "VWD")
++   df$Contract <- ifelse( st %in% con, 1, 0 )
++   df$WrntyDeed <- ifelse( st %in% wd, 1, 0 )
++   df$NewSale <- ifelse( st=="New", 1, 0 )
++   df$SaleType <- NULL
++ 
++   # Only one kind of building type seems to be different
++   df$SingleFam <- ifelse( as.character(df$BldgType)=="1Fam", 1, 0 )
++   df$BldgType <- NULL
++ 
++   # It matters if you have a garage, but this is captured by "HasGarageYear"
++   # It also matters if it's a real garage or just a car port, so:
++   df$CarPort <- ifelse( as.character(df$GarageType)=="CarPort", 1, 0 )
++   df$GarageType <- NULL
++ 
++   # Residential vs. nonresidential seems to be only relevant aspect of zoning
++   zo <- as.character(df$MSZoning)
++   res_zone <- c( "FV", "RH", "RL", "RP", "RM" )
++   df$Residential <- ifelse( zo %in% res_zone, 1, 0 )
++   df$MSZoning <- NULL
++ 
++   # Get rid of RoofMatl. It is an overfit dummy for one case.
++   # Earlier analysis showed all levels got OLS coefficients that were
++   # very significantly different from zero but not different from one another.
++   # "ClyTile" was the omitted category and was only one case.
++   df$RoofMatl <- NULL
++ 
++   # Get rid of MiscFeature. Per earlier analysis, it's a mess. Don't want to deal with it.
++   df$MiscFeature <- NULL
++ 
++   # Factors that earlier analyses didn't like and too much of a pain in the neck to keep
++   df$Fence <- NULL
++   df$RoofStyle <- NULL
++   df$Heating <- NULL
++ 
++   # I didn't see any residual seasonal pattern, so:
++   df$MoSold <- NULL
++ 
++   # These nonlinearitiesn seem to matter
++   df$LotFrontage2 <- df$LotFrontage^2
++   df$SinceRemod <- df$YrSold - df$YearRemodAdd
++   df$SinceRemod2 <- df$SinceRemod^2
++   df$YrSold <- NULL
++   df$YearRemodAdd <- NULL
++   df$BsmtFinSF1sq <- df$BsmtFinSF1^2
++ 
++   # The following turn out to be redundant. But may want to bring them back later.
++   df$TotalBsmtSF <- NULL
++   df$HasMasVnr <- NULL
++   df$KitchenAbvGr_r <- NULL
++   df$GarageCond.n_r <- NULL
++   
++   df
++ }
+
+> # Function to fit several formula "fo" using several fitting methods "models"
+> fitModels <- function( df, fo, models, runParallel, seed ) {
++ 
++   if (runParallel) {
++     # Set up for multiple cores
++     cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
++     registerDoParallel(cluster)
++     }
++ 
++   # Fit the models
++   modelfits = list()
++   for (m in models) {
++     print ( paste("Training model:", m) )
++     set.seed(seed)
++     fit <- train( as.formula(fo), data=df, method=m )
++     modelfits = c(modelfits, list(fit))
++   }
++ 
++   if (runParallel) {
++     # Go back to sequential processing
++     stopCluster(cluster)
++     registerDoSEQ()
++   }
++   
++   names(modelfits) <- models
++ 
++ modelfits 
++ }
+
+> # Function to make predictions given several model fits
+> makePredictions <- function( df, modelfits, basepred, is_test ) {
++ 
++   modelnames <- names(modelfits)
++   rmses <- list()
++   predicted <- list()
++   for (fi in modelfits) {
++     writeLines ( paste("\n\n\nPredicting for model:", fi[[1]]) )
++     p <- predict(fi, newdata=df)
++     if (!is.null(basepred)) {
++       p[is.na(p)] <- basepred[is.na(p)]
++       }
++     predicted <- c(predicted, list(p))
++     if (!is_test) {
++       rmses <- c(rmses, rmse(df$RelPrice, p))
++     }
++   }
++   names(predicted) <- modelnames
++   if (!is_test) {
++     names(rmses) <- modelnames
++     print( rmses )
++   }
++   
++   predicted
++ }
+
+> # Function to choose an ensemble of models and weight them
+> chooseEnsemble <- function( df, predicted ) {
++ 
++   preddf <- cbind( as.data.frame(predicted), df$RelPrice )
++   colnames(preddf) <- c(modelnames, "actual")
++   bestcoef = 0
++   i = 1
++ 
++   while ( bestcoef <= 0 ) {
++ 
++     # Run full equation
++     predeq <- lm(actual~.-1, data=preddf)
++     summary( predeq )
++     cof <- predeq$coefficients
++     bestmod <- names( cof[order(cof,decreasing=TRUE)] )[i]
++     i = i + 1
++ 
++     # Force coefficients to sum to 1
++     preddf2 <- preddf
++     predmod <- "actual~-1"
++     for (n in names(preddf2)) {
++       preddf2[n] <- preddf2[n] - preddf[bestmod]
++       if (!(n=="actual"||n==bestmod)) {
++         predmod = paste0(predmod, "+", n)
++       }
++     }
++ 
++     # Keep dropping variables until all coefficients are positive
++     eq <- lm( predmod, data=preddf2 )
++     while( min(eq$coefficients) < 0 ) {
++       dropv <- names( which.min(eq$coefficients) )
++       predmod <- gsub( paste0("+",dropv), "", predmod, fixed=TRUE)
++       eq <- lm(predmod, data=preddf2)
++     }
++ 
++     # Calculate missing coefficient
++     bestcoef = 1 - sum(eq$coefficients)
++     names(bestcoef) <- bestmod
++     weights <- c(eq$coefficients, bestcoef)
++   }
++   
++   weights
++ }
+
+> # mtyxwp's function to deal with missing data (copied from "svm_simple" kernel
+> deal_missing <- function(simpledf){
++   for(i in 1:ncol(simpledf))
++   {
++     u <- simpledf[,i]
++     if (is.numeric(u))
++     {
++       simpledf[is.na(u),i] <- median(simpledf[!is.na(u),i])
++     } else
++     {
++       u[is.na(u)] <- "Not Available"
++       simpledf[,i] <- as.factor(u)
++     }
++   }
++   return(simpledf)
++ }
+
+> # PRELIMINARIES II.  EXTRA DATA (from FHFA website)
+> 
+> # FHFA (formerly OFHEO) House Price Index for West North Central region
+> OFHEO = c(209.32, 210.23, 211.68, 212.71, 214.37, 215.37,
++           216.37, 216.22, 215.45, 214.48, 214.73, 211.92,
++           212.23, 214.99, 215.82, 216.99, 217.89, 218.28,
++           218.69, 216.78, 217.27, 212.78, 212.72, 211.6, 
++           208.58, 208.62, 209.68, 210.28, 209.78, 210.87,
++           209.68, 208.77, 206.08, 206.07, 200.51, 201.47,
++           201.78, 204.24, 201.05, 203.8,  205.1,  206.55,
++           205.27, 204.63, 203.47, 204.22, 202.74, 199.78,
++           196.35, 197.64, 198.89, 202.13, 204.25, 204.61,
++           200.13, 201.76, 198.03, 197.87, 195.11, 193.46 )
+
+> Year = c( 2006, 2006, 2006, 2006, 2006, 2006,
++           2006, 2006, 2006, 2006, 2006, 2006,
++           2007, 2007, 2007, 2007, 2007, 2007,
++           2007, 2007, 2007, 2007, 2007, 2007,
++           2008, 2008, 2008, 2008, 2008, 2008,
++           2008, 2008, 2008, 2008, 2008, 2008,
++           2009, 2009, 2009, 2009, 2009, 2009,
++           2009, 2009, 2009, 2009, 2009, 2009,
++           2010, 2010, 2010, 2010, 2010, 2010,
++           2010, 2010, 2010, 2010, 2010, 2010 )
+
+> Month = c( 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
++            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
++            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
++            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
++            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 )
+
+> ofheo <- data.frame( Month, Year, OFHEO )
+
+> # ON TO THE MAIN EVENT
+> 
+> # READ IN AND CLEAN DATA
+> 
+> rawdata <- read.csv(trainfile, na.strings="")
+
+> data1 <- rawdata[rawdata$GrLivArea<=4000,]  # Reomve outliers from training data
+
+> data1 <- merge(data1, ofheo, by.x=c("YrSold","MoSold"), by.y=c("Year","Month"))
+
+> data1 <- cleanData( data1 )
+The following `from` values were not present in `x`: Po
+The following `from` values were not present in `x`: Po
+The following `from` values were not present in `x`: Ex
+The following `from` values were not present in `x`: Sal
+The following `from` values were not present in `x`: ELO, NoSewr
+The following `from` values were not present in `x`: TA
+The following `from` values were not present in `x`: Po
+
+> # DIVIDE DATA INTO SUBSESTS
+> 
+> #    "train1"   (60%)  for  primary training 
+> #    "validate" (20%)  for  cross-validation 
+> #    "testing"  (20%)  for  initial testing
+> 
+> set.seed(999)
+
+> inTrain <- createDataPartition(y=data1$RelPrice, p=0.8, list=FALSE)
+
+> training <- data1[inTrain,]
+
+> testing <- data1[-inTrain,]
+
+> inTrain1 <- createDataPartition(y=training$RelPrice, p=0.75, list=FALSE)
+
+> train1 <- training[inTrain1,]
+
+> validate <- training[-inTrain1,]
+
+> # RUN BASELINE LINEAR MODEL AND USE TO RECODE CATEGORICAL VARIABLES
+> 
+> # Make working copy of data
+> da <- train1
+
+> # Baseline model
+> basemod <- "RelPrice ~ LnOFHEO + Ln1stFlrSF + LnLivArea + OverallQual + OverallCond"
+
+> # Make factors continuous and add continuous versions to baseline model one by one
+> factors <- c( "Neighborhood", "MSSubClass", "Condition1", "Exterior1st", "Condition2", 
++               "Exterior2nd",  "LotConfig",  "Foundation")
+
+> mod <- basemod
+
+> coeffs <- list()
+
+> i <- 0 
+
+> for (f in factors) {    
++   co <- getCoeffs( da, mod, f )
++   i <- i + 1
++   coeffs[[i]] <- co
++   names(coeffs)[i] <- f
++   da <- makeContinuous( da, f, co )
++   mod <- paste0( mod, "+", f, "_r" ) 
++ }
+
+> # Show output of augmented model
+> print( summary( lm( formula=mod, data=da ) ) )
+
+Call:
+lm(formula = mod, data = da)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.68120 -0.07686  0.00093  0.07502  0.48360 
+
+Coefficients:
+                 Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    -1.315e-12  9.252e-01   0.000 1.000000    
+LnOFHEO        -9.666e-01  1.646e-01  -5.873 6.10e-09 ***
+Ln1stFlrSF      2.606e-01  1.794e-02  14.522  < 2e-16 ***
+LnLivArea       3.917e-01  1.905e-02  20.561  < 2e-16 ***
+OverallQual     8.413e-02  5.405e-03  15.564  < 2e-16 ***
+OverallCond     4.945e-02  4.430e-03  11.163  < 2e-16 ***
+Neighborhood_r  7.177e-01  5.100e-02  14.073  < 2e-16 ***
+MSSubClass_r    7.800e-01  1.106e-01   7.056 3.53e-12 ***
+Condition1_r    1.106e+00  2.399e-01   4.609 4.66e-06 ***
+Exterior1st_r   1.191e+00  1.945e-01   6.123 1.39e-09 ***
+Condition2_r    1.039e+00  4.307e-01   2.412 0.016078 *  
+Exterior2nd_r   1.168e+00  4.543e-01   2.570 0.010331 *  
+LotConfig_r     1.072e+00  3.018e-01   3.552 0.000404 ***
+Foundation_r    1.000e+00  1.905e-01   5.250 1.91e-07 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.135 on 862 degrees of freedom
+Multiple R-squared:  0.8847,	Adjusted R-squared:  0.883 
+F-statistic: 508.9 on 13 and 862 DF,  p-value: < 2.2e-16
+
+
+> # CONVERT ORDERED CATEGORICAL AND INTEGER VARIABLES TO CONTINUOUS
+> 
+> # Make the rest of the ordered variables continuous, and save coefficients used.
+> ordered <- c("OverallQual",    "OverallCond",  # 1st 2=special cases bcuz in baseline mod  
++              "Functional.n", "Fireplaces",     "KitchenQual.n", 
++              "BsmtExposure.n", "HeatingQC.n",  "Utilities.n",    "FullBath",  
++              "HalfBath",       "GarageCars",   "BsmtFullBath",   "GarageQual.n", 
++              "BsmtFinType1.n", "PavedDrive.n", "BsmtCond.n",     "GarageCond.n", 
++              "FireplaceQu.n",  "ExterQual.n",  "TotRmsAbvGrd",   "LotShape.n", 
++              "BsmtHalfBath",   "PoolQC.n",     "BsmtFinType2.n", "ExterCond.n", 
++              "BedroomAbvGr",   "BsmtHeight",   "KitchenAbvGr",   "GarageFinish.n") 
+
+> out <- makeOrderedVariablesContinuous(da, mod, ordered)
+[1] "dummify returned NULL for Utilities.n"
+
+> da <- out$df
+
+> mod <- out$mod
+
+> orderedCoeffs <- out$coeffs
+
+> varsToDrop <- out$drop
+
+> # MAKE THE DATA NICE
+> 
+> da = finalCleaning( da )
+
+> # INSPECT OUTPUT OF FULL MODEL
+> 
+> regmodel = lm( formula="RelPrice ~ .", data=da )
+
+> print( summary( regmodel ) )
+
+Call:
+lm(formula = "RelPrice ~ .", data = da)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.59604 -0.04793  0.00229  0.05261  0.43373 
+
+Coefficients:
+                    Estimate Std. Error t value Pr(>|t|)    
+(Intercept)        1.999e+00  9.379e-01   2.131 0.033364 *  
+Id                 6.521e-06  8.281e-06   0.788 0.431223    
+LotFrontage        1.384e-03  8.996e-04   1.539 0.124202    
+LotArea            2.325e-06  6.412e-07   3.627 0.000306 ***
+StreetPave         4.388e-02  5.634e-02   0.779 0.436253    
+AlleyNA           -6.751e-03  1.950e-02  -0.346 0.729253    
+AlleyPave          5.648e-02  2.739e-02   2.062 0.039504 *  
+LandContourHLS     2.427e-02  2.719e-02   0.893 0.372366    
+LandContourLow    -2.443e-02  3.192e-02  -0.765 0.444322    
+LandContourLvl    -2.286e-02  1.843e-02  -1.241 0.215051    
+LandSlopeMod       6.894e-02  2.127e-02   3.241 0.001243 ** 
+LandSlopeSev      -1.921e-01  5.056e-02  -3.801 0.000156 ***
+HouseStyle1.5Unf   4.750e-02  4.048e-02   1.173 0.240982    
+HouseStyle1Story  -4.118e-03  2.148e-02  -0.192 0.847979    
+HouseStyle2.5Fin  -6.484e-02  5.969e-02  -1.086 0.277673    
+HouseStyle2.5Unf   3.099e-02  4.207e-02   0.737 0.461452    
+HouseStyle2Story  -1.893e-02  1.672e-02  -1.133 0.257746    
+HouseStyleSFoyer   7.237e-03  3.246e-02   0.223 0.823614    
+HouseStyleSLvl    -1.836e-02  2.540e-02  -0.723 0.469983    
+YearBuilt          1.042e-03  3.385e-04   3.078 0.002155 ** 
+MasVnrTypeBrkFace  2.899e-02  3.571e-02   0.812 0.417110    
+MasVnrTypeNA      -4.315e-03  5.808e-02  -0.074 0.940796    
+MasVnrTypeNone     2.015e-02  3.606e-02   0.559 0.576534    
+MasVnrTypeStone    3.834e-02  3.770e-02   1.017 0.309422    
+MasVnrArea        -3.965e-05  3.288e-05  -1.206 0.228211    
+BsmtFinSF1         6.363e-05  4.135e-05   1.539 0.124225    
+BsmtFinSF2         1.084e-04  3.276e-05   3.308 0.000982 ***
+BsmtUnfSF          6.626e-05  2.344e-05   2.827 0.004825 ** 
+CentralAirY        7.745e-02  1.853e-02   4.180 3.25e-05 ***
+ElectricalFuseF    2.406e-02  3.054e-02   0.788 0.430999    
+ElectricalFuseP   -3.436e-02  6.536e-02  -0.526 0.599307    
+ElectricalMix      3.122e-02  1.106e-01   0.282 0.777812    
+ElectricalSBrkr   -8.667e-03  1.542e-02  -0.562 0.574308    
+Ln1stFlrSF         1.772e-01  5.085e-02   3.484 0.000521 ***
+X2ndFlrSF          1.100e-04  3.844e-05   2.861 0.004342 ** 
+LowQualFinSF      -5.281e-05  1.124e-04  -0.470 0.638593    
+LnLivArea          2.337e-01  6.139e-02   3.806 0.000152 ***
+GarageYrBlt       -7.421e-04  3.088e-04  -2.403 0.016476 *  
+GarageArea         1.404e-04  3.955e-05   3.549 0.000409 ***
+WoodDeckSF         8.481e-05  3.174e-05   2.672 0.007694 ** 
+OpenPorchSF        3.549e-05  6.003e-05   0.591 0.554483    
+EnclosedPorch      1.552e-04  6.585e-05   2.357 0.018661 *  
+X3SsnPorch         1.627e-04  2.296e-04   0.709 0.478798    
+ScreenPorch        2.332e-04  6.447e-05   3.616 0.000318 ***
+PoolArea           3.959e-05  2.109e-04   0.188 0.851163    
+MiscVal           -4.896e-06  1.792e-05  -0.273 0.784731    
+LnOFHEO           -9.851e-01  1.279e-01  -7.704 3.99e-14 ***
+HasLotFrontage    -7.021e-02  3.706e-02  -1.894 0.058531 .  
+HasGarageYr        1.460e+00  6.015e-01   2.427 0.015443 *  
+HasBasement       -2.376e-02  6.164e-02  -0.385 0.700017    
+Neighborhood_r     3.458e-01  4.919e-02   7.029 4.53e-12 ***
+MSSubClass_r       2.006e-01  1.217e-01   1.648 0.099731 .  
+Condition1_r       1.060e+00  1.904e-01   5.569 3.53e-08 ***
+Exterior1st_r      6.306e-01  1.528e-01   4.127 4.07e-05 ***
+Condition2_r       4.849e-01  3.253e-01   1.491 0.136467    
+Exterior2nd_r      7.205e-01  3.546e-01   2.032 0.042485 *  
+LotConfig_r        7.138e-01  2.383e-01   2.995 0.002828 ** 
+Foundation_r       5.909e-01  1.869e-01   3.161 0.001631 ** 
+OverallQual_r      6.294e-01  5.996e-02  10.498  < 2e-16 ***
+OverallCond_r      6.414e-01  7.980e-02   8.039 3.36e-15 ***
+Functional.n_r     1.028e+00  1.470e-01   6.993 5.80e-12 ***
+Fireplaces_r       6.914e-01  2.169e-01   3.187 0.001492 ** 
+KitchenQual.n_r    2.404e-01  1.717e-01   1.400 0.161965    
+BsmtExposure.n_r   4.121e-01  1.561e-01   2.641 0.008444 ** 
+HeatingQC.n_r      7.553e-01  3.371e-01   2.240 0.025357 *  
+FullBath_r         5.979e-01  2.327e-01   2.570 0.010353 *  
+HalfBath_r         5.287e-01  2.687e-01   1.968 0.049465 *  
+GarageCars_r       2.692e-01  2.526e-01   1.066 0.286776    
+BsmtFullBath_r     3.403e-01  1.863e-01   1.826 0.068171 .  
+GarageQual.n_r     7.937e-01  3.741e-01   2.122 0.034188 *  
+BsmtFinType1.n_r   8.857e-01  2.540e-01   3.487 0.000516 ***
+PavedDrive.n_r     4.398e-01  6.925e-01   0.635 0.525522    
+BsmtCond.n_r       2.295e+00  1.473e+00   1.558 0.119686    
+FireplaceQu.n_r    2.020e-01  4.461e-01   0.453 0.650775    
+ExterQual.n_r      5.493e-01  7.576e-01   0.725 0.468669    
+TotRmsAbvGrd_r     8.286e-01  5.875e-01   1.410 0.158831    
+LotShape.n_r       7.104e+00  8.832e+00   0.804 0.421450    
+BsmtHalfBath_r     5.488e-01  5.497e-01   0.998 0.318411    
+PoolQC.n_r         1.076e+00  1.042e+00   1.032 0.302356    
+BsmtFinType2.n_r   1.094e+00  6.683e-01   1.636 0.102187    
+ExterCond.n_r      9.566e-01  8.404e-01   1.138 0.255364    
+BedroomAbvGr_r     1.784e-01  5.022e-01   0.355 0.722577    
+BsmtHeight_r       6.209e-01  5.217e-01   1.190 0.234396    
+GarageFinish.n_r   6.276e-01  7.661e-01   0.819 0.412875    
+SaleMisc          -8.400e-04  2.968e-02  -0.028 0.977428    
+SaleAbnormal      -3.110e-02  1.602e-02  -1.942 0.052501 .  
+Contract           8.102e-02  3.986e-02   2.033 0.042424 *  
+WrntyDeed          6.545e-03  2.298e-02   0.285 0.775832    
+NewSale            5.588e-02  4.020e-02   1.390 0.164909    
+SingleFam          2.082e-02  1.415e-02   1.471 0.141674    
+CarPort            5.812e-02  5.115e-02   1.136 0.256222    
+Residential        4.187e-01  4.611e-02   9.079  < 2e-16 ***
+LotFrontage2      -5.899e-06  5.542e-06  -1.064 0.287484    
+SinceRemod        -2.013e-03  9.901e-04  -2.033 0.042375 *  
+SinceRemod2        1.854e-05  1.619e-05   1.145 0.252511    
+BsmtFinSF1sq       4.195e-08  2.297e-08   1.827 0.068150 .  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.09769 on 780 degrees of freedom
+Multiple R-squared:  0.9454,	Adjusted R-squared:  0.9387 
+F-statistic: 142.1 on 95 and 780 DF,  p-value: < 2.2e-16
+
+
+> # FOR A QUICK CHECK, APPLY TRANSFORMAITONS TO CROSS-VALIDATION SET AND PREDICT
+> 
+> # Make working copy of data
+> da2 <- validate
+
+> # Process it
+> for (f in factors) {    
++   co <- coeffs[[f]]
++   da2 <- makeContinuous( da2, f, co )
++ }
+
+> for ( var in ordered ) {
++   if ( var %in% varsToDrop ) {
++     da2[var] <- NULL
++   }
++   else {
++     da2 <- makeOrderedContinuous( da2, var, orderedCoeffs[[var]] )
++   }
++ }
+
+> da2 <- finalCleaning( da2 )
+
+> # Make predictions
+> prediction <- predict(regmodel, da2, type="response")
+
+> # Fill in missing values
+> baselm <- lm(formula=basemod, data=train1)
+
+> basepred <- predict( baselm, validate, type="response")
+
+> prediction[is.na(prediction)] <- basepred[is.na(prediction)]
+
+> # RMSE
+> rmse(da2$RelPrice,prediction)
+[1] 0.1214196
+
+> # AND HOW ABOUT A QUICKIE VISUAL REGULARIZATION
+> 
+> fo = "RelPrice ~ LotFrontage + LotArea + Alley + LandContour + LandSlope "
+
+> fo = paste0(fo, "+ YearBuilt + MasVnrArea + BsmtFinSF1 + BsmtFinSF2 ")
+
+> fo = paste0(fo, "+ BsmtUnfSF + CentralAir + Ln1stFlrSF + X2ndFlrSF ")
+
+> fo = paste0(fo, "+ LowQualFinSF + LnLivArea + GarageArea + WoodDeckSF ")
+
+> fo = paste0(fo, "+ OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch ")
+
+> fo = paste0(fo, "+ LnOFHEO + HasLotFrontage + Neighborhood_r + Condition1_r ")
+
+> fo = paste0(fo, "+ Exterior1st_r + Condition2_r + Exterior2nd_r + LotConfig_r ")
+
+> fo = paste0(fo, "+ Foundation_r + OverallQual_r + OverallCond_r + Functional.n_r ")
+
+> fo = paste0(fo, "+ Fireplaces_r + KitchenQual.n_r + BsmtExposure.n_r + HeatingQC.n_r ")
+
+> fo = paste0(fo, "+ FullBath_r + HalfBath_r + GarageCars_r + BsmtFullBath_r ")
+
+> fo = paste0(fo, "+ GarageQual.n_r + BsmtFinType1.n_r + ExterQual.n_r + TotRmsAbvGrd_r ")
+
+> fo = paste0(fo, "+ PoolQC.n_r + BsmtFinType2.n_r + ExterCond.n_r + SaleAbnormal ")
+
+> fo = paste0(fo, "+ Contract + NewSale + SingleFam + Residential + LotFrontage2 ")
+
+> fo = paste0(fo, "+ SinceRemod + SinceRemod2 + BsmtFinSF1sq ")
+
+> mymodel = lm( formula=fo, data=da )
+
+> prediction <- predict(mymodel, da2, type="response")
+
+> prediction[is.na(prediction)] <- basepred[is.na(prediction)]
+
+> rmse(da2$RelPrice,prediction)
+[1] 0.1221414
+
+> # RUN FITS AND FIND BEST COMBO OF PREDICTORS
+> 
+> modelfits <- fitModels( da, fo, modelnames, !running_as_kaggle_kernel, 998 )
+[1] "Training model: lars2"
+Loading required package: lars
+Loaded lars 1.2
+
+[1] "Training model: cubist"
+Loading required package: Cubist
+[1] "Training model: glmboost"
+Loading required package: mboost
+Loading required package: stabs
+This is mboost 2.7-0. See ‘package?mboost’ and ‘news(package  = "mboost")’
+for a complete list of changes.
+
+
+Attaching package: ‘mboost’
+
+The following object is masked from ‘package:ggplot2’:
+
+    %+%
+
+[1] "Training model: glmnet"
+Loading required package: glmnet
+Loading required package: Matrix
+Loaded glmnet 2.0-5
+
+
+Attaching package: ‘glmnet’
+
+The following object is masked from ‘package:Metrics’:
+
+    auc
+
+[1] "Training model: lasso"
+Loading required package: elasticnet
+[1] "Training model: bayesglm"
+Loading required package: arm
+Loading required package: MASS
+Loading required package: lme4
+
+arm (Version 1.9-3, built: 2016-11-21)
+
+Working directory is /Users/andy/Documents/workspace/learning/courses/courseraScale/houseProj/ames
+
+[1] "Training model: ridge"
+[1] "Training model: xgbLinear"
+[1] "Training model: nnls"
+Loading required package: nnls
+[1] "Training model: icr"
+Loading required package: fastICA
+[1] "Training model: gbm"
+Loading required package: gbm
+Loading required package: survival
+
+Attaching package: ‘survival’
+
+The following object is masked from ‘package:caret’:
+
+    cluster
+
+Loading required package: splines
+Loaded gbm 2.1.1
+Iter   TrainDeviance   ValidDeviance   StepSize   Improve
+     1        0.1385             nan     0.1000    0.0169
+     2        0.1227             nan     0.1000    0.0143
+     3        0.1089             nan     0.1000    0.0113
+     4        0.0985             nan     0.1000    0.0091
+     5        0.0890             nan     0.1000    0.0094
+     6        0.0804             nan     0.1000    0.0082
+     7        0.0729             nan     0.1000    0.0059
+     8        0.0669             nan     0.1000    0.0053
+     9        0.0613             nan     0.1000    0.0047
+    10        0.0563             nan     0.1000    0.0043
+    20        0.0301             nan     0.1000    0.0012
+    40        0.0158             nan     0.1000    0.0002
+    60        0.0121             nan     0.1000    0.0001
+    80        0.0104             nan     0.1000   -0.0000
+   100        0.0093             nan     0.1000   -0.0000
+   120        0.0086             nan     0.1000   -0.0001
+   140        0.0079             nan     0.1000    0.0000
+   150        0.0076             nan     0.1000   -0.0000
+
+
+> predicted <- makePredictions ( da2, modelfits, basepred, FALSE )
+
+
+
+Predicting for model: lars2
+
+
+
+Predicting for model: cubist
+
+
+
+Predicting for model: glmboost
+
+
+
+Predicting for model: glmnet
+
+
+
+Predicting for model: lasso
+
+
+
+Predicting for model: bayesglm
+
+
+
+Predicting for model: ridge
+
+
+
+Predicting for model: xgbLinear
+
+
+
+Predicting for model: nnls
+
+
+
+Predicting for model: icr
+
+
+
+Predicting for model: gbm
+$lars2
+[1] 0.119926
+
+$cubist
+[1] 0.1179093
+
+$glmboost
+[1] 0.1279843
+
+$glmnet
+[1] 0.1195784
+
+$lasso
+[1] 0.1200009
+
+$bayesglm
+[1] 0.1220383
+
+$ridge
+[1] 0.122068
+
+$xgbLinear
+[1] 0.1336476
+
+$nnls
+[1] 0.1249448
+
+$icr
+[1] 0.152966
+
+$gbm
+[1] 0.1236683
+
+
+> weights <- chooseEnsemble( da2, predicted )
+
+> bestmodels <- names(weights)
+
+> preddf <- cbind( as.data.frame(predicted), da2$RelPrice )
+
+> colnames(preddf) <- c(modelnames, "actual")
+
+> p_ensemble <- as.data.frame( as.matrix(preddf[bestmodels]) %*% weights )
+
+> names( p_ensemble ) <- "ensemble"
+
+> rmse( da2$RelPrice, p_ensemble )
+[1] 0.1140577
+
+> # FIND NEW COEFFICIENTS TO MAKE FACTORS CONTINUOUS, INCLUDING THE VALIDATION DATA
+> 
+> # Make working copy of data
+> da3 <- training
+
+> # Make factors continuous
+> mod <- basemod
+
+> coeffs <- list()
+
+> i <- 0 
+
+> for (f in factors) {    
++   co <- getCoeffs( da3, mod, f )
++   i <- i + 1
++   coeffs[[i]] <- co
++   names(coeffs)[i] <- f
++   da3 <- makeContinuous( da3, f, co )
++   mod <- paste0( mod, "+", f, "_r" ) 
++ }
+
+> # Make ordered variables continuous
+> out <- makeOrderedVariablesContinuous(da3, mod, ordered)
+[1] "dummify returned NULL for Utilities.n"
+[1] "addDummiesToModel returned NULL"
+
+> da3 <- out$df
+
+> mod <- out$mod
+
+> orderedCoeffs <- out$coeffs
+
+> varsToDrop <- out$drop
+
+> # Make data nice
+> da3 = finalCleaning( da3 )
+
+> # APPLY TRANSFORMATIONS TO INITIAL TEST DATA SET
+> 
+> # Make working copy of data
+> da4 <- testing
+
+> # Make factors continuous and add continuous versions to baseline model one by one
+> for (f in factors) {    
++   co <- coeffs[[f]]
++   da4 <- makeContinuous( da4, f, co )
++ }
+
+> # Make ordered variables continuous
+> for ( var in ordered ) {
++   if ( var %in% varsToDrop ) {
++     da4[var] <- NULL
++   }
++   else {
++     da4 <- makeOrderedContinuous( da4, var, orderedCoeffs[[var]] )
++   }
++ }
+
+> # Make data nice
+> da4 <- finalCleaning( da4 )
+
+> # RE-FIT AND TEST
+> 
+> modelfits <- fitModels( da3, fo, bestmodels, !running_as_kaggle_kernel, 997 )
+[1] "Training model: ridge"
+[1] "Training model: xgbLinear"
+[1] "Training model: nnls"
+[1] "Training model: icr"
+[1] "Training model: gbm"
+Iter   TrainDeviance   ValidDeviance   StepSize   Improve
+     1        0.1379             nan     0.1000    0.0186
+     2        0.1229             nan     0.1000    0.0139
+     3        0.1105             nan     0.1000    0.0115
+     4        0.0997             nan     0.1000    0.0093
+     5        0.0900             nan     0.1000    0.0097
+     6        0.0815             nan     0.1000    0.0086
+     7        0.0742             nan     0.1000    0.0066
+     8        0.0677             nan     0.1000    0.0061
+     9        0.0622             nan     0.1000    0.0049
+    10        0.0574             nan     0.1000    0.0039
+    20        0.0307             nan     0.1000    0.0010
+    40        0.0166             nan     0.1000    0.0002
+    60        0.0129             nan     0.1000    0.0000
+    80        0.0112             nan     0.1000    0.0000
+   100        0.0102             nan     0.1000   -0.0000
+   120        0.0094             nan     0.1000   -0.0001
+   140        0.0087             nan     0.1000   -0.0000
+   150        0.0084             nan     0.1000   -0.0000
+
+[1] "Training model: cubist"
+
+> predicted <- makePredictions ( da4, modelfits, NULL, FALSE )
+
+
+
+Predicting for model: ridge
+
+
+
+Predicting for model: xgbLinear
+
+
+
+Predicting for model: nnls
+
+
+
+Predicting for model: icr
+
+
+
+Predicting for model: gbm
+
+
+
+Predicting for model: cubist
+$ridge
+[1] 0.1164441
+
+$xgbLinear
+[1] 0.1319377
+
+$nnls
+[1] 0.118229
+
+$icr
+[1] 0.1588967
+
+$gbm
+[1] 0.1143344
+
+$cubist
+[1] 0.1081933
+
+
+> p_ensemble <- 0*da4$RelPrice
+
+> preddf <- as.data.frame( predicted )
+
+> p_ensemble <- as.data.frame( as.matrix(preddf[bestmodels]) %*% weights )
+
+> names(p_ensemble) <- "ensemble"
+
+> # Estimated forecast error
+> print( rmse( da4$RelPrice, p_ensemble ) )
+[1] 0.1082029
+
+> # REDO ANALYSIS WITH FULL OFFICIAL TRAINING SET
+> 
+> # Make working copy of data
+> da5 <- data1
+
+> # Make factors continuous
+> mod <- basemod
+
+> coeffs <- list()
+
+> i <- 0 
+
+> for (f in factors) {    
++   co <- getCoeffs( da5, mod, f )
++   i <- i + 1
++   coeffs[[i]] <- co
++   names(coeffs)[i] <- f
++   da5 <- makeContinuous( da5, f, co )
++   mod <- paste0( mod, "+", f, "_r" ) 
++ }
+
+> # Make ordered varibles continuous
+> out <- makeOrderedVariablesContinuous(da5, mod, ordered)
+[1] "addDummiesToModel returned NULL"
+
+> da5 <- out$df
+
+> mod <- out$mod
+
+> orderedCoeffs <- out$coeffs
+
+> varsToDrop <- out$drop
+
+> # Make data nice
+> da5 = finalCleaning( da5 )
+
+> # Inspect output of full model
+> regmodel = lm( formula="RelPrice ~ .", data=da5 )
+
+> print( summary( regmodel ) )
+
+Call:
+lm(formula = "RelPrice ~ .", data = da5)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.67738 -0.05126  0.00211  0.05614  0.46514 
+
+Coefficients:
+                    Estimate Std. Error t value Pr(>|t|)    
+(Intercept)        1.894e+00  7.416e-01   2.554 0.010769 *  
+Id                -3.524e-06  6.551e-06  -0.538 0.590742    
+LotFrontage        6.814e-04  3.934e-04   1.732 0.083462 .  
+LotArea            2.076e-06  3.898e-07   5.325 1.18e-07 ***
+StreetPave         9.078e-02  4.704e-02   1.930 0.053837 .  
+AlleyNA            5.369e-03  1.661e-02   0.323 0.746619    
+AlleyPave          5.230e-02  2.335e-02   2.239 0.025294 *  
+LandContourHLS     2.617e-02  2.094e-02   1.250 0.211680    
+LandContourLow    -9.084e-03  2.551e-02  -0.356 0.721787    
+LandContourLvl     1.087e-03  1.493e-02   0.073 0.941999    
+LandSlopeMod       2.515e-02  1.632e-02   1.541 0.123573    
+LandSlopeSev      -1.043e-01  3.872e-02  -2.694 0.007149 ** 
+HouseStyle1.5Unf   4.045e-02  3.278e-02   1.234 0.217426    
+HouseStyle1Story   4.988e-03  1.735e-02   0.287 0.773815    
+HouseStyle2.5Fin  -7.326e-02  5.019e-02  -1.460 0.144614    
+HouseStyle2.5Unf   1.075e-03  3.523e-02   0.031 0.975656    
+HouseStyle2Story  -2.213e-02  1.360e-02  -1.627 0.104026    
+HouseStyleSFoyer   1.382e-02  2.598e-02   0.532 0.594975    
+HouseStyleSLvl     4.866e-03  1.990e-02   0.244 0.806886    
+YearBuilt          8.446e-04  2.689e-04   3.141 0.001721 ** 
+MasVnrTypeBrkFace  2.028e-02  2.857e-02   0.710 0.477961    
+MasVnrTypeNA      -6.585e-03  4.674e-02  -0.141 0.887974    
+MasVnrTypeNone     2.106e-02  2.889e-02   0.729 0.466264    
+MasVnrTypeStone    3.945e-02  3.035e-02   1.300 0.193849    
+MasVnrArea         1.657e-06  2.382e-05   0.070 0.944535    
+BsmtFinSF1         7.110e-05  3.457e-05   2.057 0.039923 *  
+BsmtFinSF2         1.118e-04  2.405e-05   4.649 3.65e-06 ***
+BsmtUnfSF          7.116e-05  1.806e-05   3.941 8.52e-05 ***
+CentralAirY        3.587e-02  1.472e-02   2.437 0.014942 *  
+ElectricalFuseF    3.492e-03  2.384e-02   0.146 0.883564    
+ElectricalFuseP   -3.621e-02  6.317e-02  -0.573 0.566626    
+ElectricalMix      3.768e-02  1.097e-01   0.344 0.731232    
+ElectricalSBrkr   -1.335e-02  1.221e-02  -1.093 0.274621    
+Ln1stFlrSF         1.734e-01  4.198e-02   4.129 3.86e-05 ***
+X2ndFlrSF          1.273e-04  3.034e-05   4.195 2.91e-05 ***
+LowQualFinSF       1.083e-04  7.828e-05   1.383 0.166851    
+LnLivArea          2.444e-01  4.947e-02   4.941 8.73e-07 ***
+GarageYrBlt       -2.764e-04  2.442e-04  -1.132 0.257902    
+GarageArea         7.212e-05  3.089e-05   2.335 0.019701 *  
+WoodDeckSF         7.114e-05  2.446e-05   2.909 0.003690 ** 
+OpenPorchSF        9.212e-05  4.721e-05   1.951 0.051234 .  
+EnclosedPorch      1.228e-04  5.120e-05   2.398 0.016634 *  
+X3SsnPorch         1.554e-04  9.335e-05   1.665 0.096164 .  
+ScreenPorch        2.484e-04  5.221e-05   4.759 2.15e-06 ***
+PoolArea          -2.940e-05  1.257e-04  -0.234 0.815157    
+MiscVal           -2.114e-06  5.623e-06  -0.376 0.707052    
+LnOFHEO           -8.189e-01  9.995e-02  -8.193 5.83e-16 ***
+HasLotFrontage    -4.452e-02  2.061e-02  -2.160 0.030952 *  
+HasGarageYr        5.479e-01  4.747e-01   1.154 0.248670    
+HasBasement       -8.478e-02  3.279e-02  -2.586 0.009813 ** 
+Neighborhood_r     3.898e-01  3.954e-02   9.859  < 2e-16 ***
+MSSubClass_r       9.152e-02  1.179e-01   0.777 0.437578    
+Condition1_r       1.221e+00  1.612e-01   7.573 6.68e-14 ***
+Exterior1st_r      5.164e-01  1.192e-01   4.334 1.58e-05 ***
+Condition2_r       1.265e-01  2.809e-01   0.450 0.652552    
+Exterior2nd_r      4.409e-01  4.558e-01   0.967 0.333558    
+LotConfig_r        9.068e-01  2.457e-01   3.692 0.000232 ***
+Foundation_r       4.844e-01  1.507e-01   3.215 0.001336 ** 
+OverallQual_r      5.543e-01  4.606e-02  12.036  < 2e-16 ***
+OverallCond_r      7.344e-01  6.029e-02  12.181  < 2e-16 ***
+Functional.n_r     8.899e-01  1.211e-01   7.351 3.38e-13 ***
+Fireplaces_r       5.066e-01  1.459e-01   3.472 0.000532 ***
+KitchenQual.n_r    4.069e-01  1.475e-01   2.758 0.005887 ** 
+BsmtExposure.n_r   4.219e-01  1.237e-01   3.410 0.000669 ***
+HeatingQC.n_r      7.535e-01  2.462e-01   3.061 0.002250 ** 
+Utilities.n_r      7.184e-01  3.191e-01   2.251 0.024524 *  
+FullBath_r         4.994e-01  3.348e-01   1.492 0.135978    
+HalfBath_r         6.921e-01  2.064e-01   3.352 0.000823 ***
+GarageCars_r       4.775e-01  1.811e-01   2.636 0.008472 ** 
+BsmtFullBath_r     4.030e-01  1.328e-01   3.035 0.002448 ** 
+GarageQual.n_r     8.653e-01  2.584e-01   3.349 0.000835 ***
+BsmtFinType1.n_r   8.790e-01  2.552e-01   3.445 0.000589 ***
+PavedDrive.n_r     1.426e+00  1.113e+00   1.281 0.200252    
+BsmtCond.n_r       1.736e+00  1.092e+00   1.590 0.112116    
+FireplaceQu.n_r    6.133e-01  3.226e-01   1.901 0.057458 .  
+ExterQual.n_r      1.404e-01  5.304e-01   0.265 0.791232    
+TotRmsAbvGrd_r     5.160e-01  4.208e-01   1.226 0.220327    
+BsmtHalfBath_r     6.073e-01  9.492e-01   0.640 0.522428    
+PoolQC.n_r         8.475e-01  8.036e-01   1.055 0.291774    
+BsmtFinType2.n_r   1.377e+00  5.087e-01   2.708 0.006860 ** 
+ExterCond.n_r      8.000e-01  9.087e-01   0.880 0.378819    
+BedroomAbvGr_r     9.249e-01  9.428e-01   0.981 0.326804    
+BsmtHeight_r       5.774e-01  2.933e-01   1.968 0.049232 *  
+GarageFinish.n_r   1.081e+00  9.893e-01   1.093 0.274690    
+SaleMisc          -5.557e-02  2.233e-02  -2.489 0.012922 *  
+SaleAbnormal      -6.630e-02  1.209e-02  -5.483 4.97e-08 ***
+Contract           5.864e-02  2.882e-02   2.035 0.042093 *  
+WrntyDeed         -9.084e-03  1.729e-02  -0.525 0.599504    
+NewSale            1.012e-01  3.062e-02   3.306 0.000971 ***
+SingleFam          3.550e-02  1.186e-02   2.994 0.002804 ** 
+CarPort           -1.608e-02  3.679e-02  -0.437 0.662145    
+Residential        3.041e-01  3.693e-02   8.233 4.25e-16 ***
+LotFrontage2      -1.637e-06  1.854e-06  -0.883 0.377261    
+SinceRemod        -9.857e-04  7.844e-04  -1.257 0.209116    
+SinceRemod2        5.523e-06  1.275e-05   0.433 0.664984    
+BsmtFinSF1sq       3.665e-08  1.937e-08   1.893 0.058632 .  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1019 on 1360 degrees of freedom
+Multiple R-squared:  0.9382,	Adjusted R-squared:  0.9338 
+F-statistic: 217.2 on 95 and 1360 DF,  p-value: < 2.2e-16
+
+
+> # Changes to model
+> fo <- gsub( "+ ExterQual.n_r ", "", fo, fixed=TRUE  )
+
+> fo <- gsub( "+ ExterCond.n_r ", "", fo, fixed=TRUE )
+
+> fo <- gsub( "+ PoolQC.n_r ", "", fo, fixed=TRUE )
+
+> fo <- paste0(fo, "+ FireplaceQu.n_r + BsmtHeight_r + SaleMisc ")
+
+> # Look at the OLS fit
+> regmodel = lm( formula=fo, data=da5 )
+
+> print( summary( regmodel ) )
+
+Call:
+lm(formula = fo, data = da5)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-0.67899 -0.05088  0.00220  0.05775  0.47738 
+
+Coefficients:
+                   Estimate Std. Error t value Pr(>|t|)    
+(Intercept)       1.741e+00  6.656e-01   2.615 0.009011 ** 
+LotFrontage       7.427e-04  3.855e-04   1.926 0.054263 .  
+LotArea           2.012e-06  3.769e-07   5.337 1.10e-07 ***
+AlleyNA           1.099e-02  1.634e-02   0.673 0.501226    
+AlleyPave         5.540e-02  2.307e-02   2.402 0.016452 *  
+LandContourHLS    3.626e-02  2.058e-02   1.762 0.078316 .  
+LandContourLow    3.349e-03  2.485e-02   0.135 0.892799    
+LandContourLvl    1.025e-02  1.459e-02   0.703 0.482333    
+LandSlopeMod      2.269e-02  1.598e-02   1.420 0.155931    
+LandSlopeSev     -1.080e-01  3.827e-02  -2.822 0.004843 ** 
+YearBuilt         1.091e-03  2.168e-04   5.033 5.46e-07 ***
+MasVnrArea        2.322e-06  1.795e-05   0.129 0.897133    
+BsmtFinSF1        5.519e-05  3.089e-05   1.787 0.074203 .  
+BsmtFinSF2        9.911e-05  2.194e-05   4.518 6.76e-06 ***
+BsmtUnfSF         5.057e-05  1.384e-05   3.654 0.000268 ***
+CentralAirY       3.551e-02  1.351e-02   2.629 0.008652 ** 
+Ln1stFlrSF        2.008e-01  3.396e-02   5.914 4.20e-09 ***
+X2ndFlrSF         1.064e-04  2.707e-05   3.933 8.82e-05 ***
+LowQualFinSF      5.757e-05  6.332e-05   0.909 0.363420    
+LnLivArea         2.347e-01  4.056e-02   5.788 8.80e-09 ***
+GarageArea        5.178e-05  2.901e-05   1.785 0.074487 .  
+WoodDeckSF        7.052e-05  2.410e-05   2.926 0.003488 ** 
+OpenPorchSF       9.703e-05  4.600e-05   2.109 0.035096 *  
+EnclosedPorch     1.532e-04  5.003e-05   3.063 0.002233 ** 
+X3SsnPorch        1.651e-04  9.312e-05   1.772 0.076536 .  
+ScreenPorch       2.434e-04  5.119e-05   4.756 2.18e-06 ***
+LnOFHEO          -8.190e-01  9.872e-02  -8.296 2.51e-16 ***
+HasLotFrontage   -4.673e-02  2.015e-02  -2.319 0.020535 *  
+Neighborhood_r    3.796e-01  3.849e-02   9.862  < 2e-16 ***
+Condition1_r      1.197e+00  1.583e-01   7.558 7.38e-14 ***
+Exterior1st_r     5.415e-01  1.177e-01   4.599 4.63e-06 ***
+Condition2_r      2.165e-01  2.709e-01   0.799 0.424191    
+Exterior2nd_r     3.888e-01  4.496e-01   0.865 0.387360    
+LotConfig_r       8.871e-01  2.423e-01   3.661 0.000261 ***
+Foundation_r      3.616e-01  1.387e-01   2.606 0.009250 ** 
+OverallQual_r     5.726e-01  4.321e-02  13.251  < 2e-16 ***
+OverallCond_r     7.622e-01  5.676e-02  13.429  < 2e-16 ***
+Functional.n_r    9.173e-01  1.140e-01   8.045 1.83e-15 ***
+Fireplaces_r      5.262e-01  1.438e-01   3.660 0.000262 ***
+KitchenQual.n_r   4.534e-01  1.412e-01   3.211 0.001353 ** 
+BsmtExposure.n_r  3.496e-01  1.137e-01   3.074 0.002151 ** 
+HeatingQC.n_r     7.625e-01  2.425e-01   3.144 0.001700 ** 
+FullBath_r        6.255e-01  3.223e-01   1.941 0.052503 .  
+HalfBath_r        5.662e-01  1.995e-01   2.837 0.004613 ** 
+GarageCars_r      6.175e-01  1.471e-01   4.197 2.88e-05 ***
+BsmtFullBath_r    3.517e-01  1.262e-01   2.786 0.005405 ** 
+GarageQual.n_r    8.260e-01  2.490e-01   3.317 0.000933 ***
+BsmtFinType1.n_r  8.551e-01  2.511e-01   3.405 0.000681 ***
+TotRmsAbvGrd_r    5.303e-01  3.809e-01   1.392 0.164046    
+BsmtFinType2.n_r  1.424e+00  5.035e-01   2.827 0.004759 ** 
+SaleAbnormal     -6.565e-02  1.109e-02  -5.918 4.10e-09 ***
+Contract          5.907e-02  2.315e-02   2.552 0.010826 *  
+NewSale           1.088e-01  2.470e-02   4.406 1.14e-05 ***
+SingleFam         4.545e-02  9.025e-03   5.036 5.37e-07 ***
+Residential       3.239e-01  3.519e-02   9.204  < 2e-16 ***
+LotFrontage2     -1.852e-06  1.828e-06  -1.013 0.311224    
+SinceRemod       -1.058e-03  7.471e-04  -1.416 0.156865    
+SinceRemod2       9.903e-06  1.207e-05   0.820 0.412169    
+BsmtFinSF1sq      3.975e-08  1.835e-08   2.167 0.030435 *  
+FireplaceQu.n_r   7.673e-01  3.151e-01   2.435 0.015006 *  
+BsmtHeight_r      5.184e-01  2.839e-01   1.826 0.068101 .  
+SaleMisc         -5.456e-02  2.219e-02  -2.459 0.014068 *  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1021 on 1394 degrees of freedom
+Multiple R-squared:  0.9364,	Adjusted R-squared:  0.9336 
+F-statistic: 336.4 on 61 and 1394 DF,  p-value: < 2.2e-16
+
+
+> # Fit the models
+> modelfits <- fitModels( da5, fo, bestmodels, !running_as_kaggle_kernel, 996 )
+[1] "Training model: ridge"
+[1] "Training model: xgbLinear"
+[1] "Training model: nnls"
+[1] "Training model: icr"
+[1] "Training model: gbm"
+Iter   TrainDeviance   ValidDeviance   StepSize   Improve
+     1        0.1387             nan     0.1000    0.0183
+     2        0.1229             nan     0.1000    0.0139
+     3        0.1111             nan     0.1000    0.0114
+     4        0.0996             nan     0.1000    0.0114
+     5        0.0895             nan     0.1000    0.0103
+     6        0.0812             nan     0.1000    0.0082
+     7        0.0738             nan     0.1000    0.0067
+     8        0.0675             nan     0.1000    0.0058
+     9        0.0622             nan     0.1000    0.0046
+    10        0.0573             nan     0.1000    0.0044
+    20        0.0311             nan     0.1000    0.0014
+    40        0.0171             nan     0.1000    0.0002
+    60        0.0132             nan     0.1000    0.0001
+    80        0.0115             nan     0.1000    0.0000
+   100        0.0106             nan     0.1000    0.0000
+   120        0.0100             nan     0.1000   -0.0000
+   140        0.0094             nan     0.1000   -0.0000
+   150        0.0092             nan     0.1000   -0.0000
+
+[1] "Training model: cubist"
+
+> # READ IN AND PROCESS TEST DATA
+> 
+> # Read data
+> testdat <- read.csv(testfile, na.strings="")
+
+> data2 <- merge(testdat, ofheo, by.x=c("YrSold","MoSold"), by.y=c("Year","Month"))
+
+> data2 <- cleanData( data2 )
+The following `from` values were not present in `x`: Po
+The following `from` values were not present in `x`: Po
+The following `from` values were not present in `x`: Ex
+The following `from` values were not present in `x`: Ex
+The following `from` values were not present in `x`: Sal
+The following `from` values were not present in `x`: ELO, NoSeWa, NoSewr
+The following `from` values were not present in `x`: Fa, TA
+The following `from` values were not present in `x`: Po
+
+> # Make factors continuous and add continuous versions to baseline model one by one
+> for (f in factors) {    
++   co <- coeffs[[f]]
++   data2 <- makeContinuous( data2, f, co )
++ }
+
+> # Make ordered variables continuous
+> for ( var in ordered ) {
++   if ( var %in% varsToDrop ) {
++     data2[var] <- NULL
++   }
++   else {
++     data2 <- makeOrderedContinuous( data2, var, orderedCoeffs[[var]] )
++   }
++ }
+
+> data2 <- finalCleaning( data2 )
+
+> # MAKE PREDICTIONS
+> 
+> predicted <- makePredictions ( data2, modelfits, NULL, TRUE )
+
+
+
+Predicting for model: ridge
+
+
+
+Predicting for model: xgbLinear
+
+
+
+Predicting for model: nnls
+
+
+
+Predicting for model: icr
+
+
+
+Predicting for model: gbm
+
+
+
+Predicting for model: cubist
+
+> preddf <- as.data.frame( predicted )
+
+> p_ensemble <- as.data.frame( as.matrix(preddf[bestmodels]) %*% weights )
+
+> names(p_ensemble) <- "ensemble"
+
+> prediction <- p_ensemble + data2$LnOFHEO
+
+> result <- data.frame( cbind( data2$Id, exp(prediction) ) )
+
+> names(result) <- c("Id", "SalePrice")
+
+> sorted_result <- result[order(result$Id),]
+
+> ###################################################################################
+> #   THIS NEXT SECTION IS mtyxwp's CODE TO RUN A SIMPLE SUPPORT VECTOR MACHINE 
+> #   (This part is copied almost verbatim from the "svm_simple" kernel)
+> ###################################################################################
+> 
+> train <- read.csv(trainfile, stringsAsFactors = F)
+
+> test <- read.csv(testfile, stringsAsFactors = F)
+
+> price = train[,c("SalePrice")]
+
+> simpledf <- rbind(train[,-81], test)
+
+> simpletrain <- deal_missing(simpledf)
+
+> sdf = simpletrain
+
+> sdftrain = sdf[1:1460,]
+
+> sdftrain = cbind(sdftrain,price)
+
+> sdftest = sdf[1461:2919,]
+
+> sdftrain = sdftrain[,-1]
+
+> id = sdftest[,1]
+
+> sdftest = sdftest[,-1]
+
+> straincpy = sdftrain
+
+> straincpy[sapply(straincpy, is.factor)] <- lapply(straincpy[sapply(straincpy, is.factor)], as.numeric)
+
+> stestcpy = sdftest
+
+> stestcpy[sapply(stestcpy, is.factor)] <- lapply(stestcpy[sapply(stestcpy, is.factor)], as.numeric)
+
+> model.svm <- svm(price ~ ., data = sdftrain, cost = 4)
+
+> price.svm = predict(model.svm, sdftest)
+
+> svmResult = cbind(Id = id, SalePrice = price.svm)
+
+> colnames(svmResult) = c("Id","SalePrice")
+
+> #############################################
+> # AVERAGE LINEAR RESULTS WITH SVM RESULTS
+> #############################################
+> 
+> semi_final_answer <- exp (   ( log(sorted_result$SalePrice) + log(svmResult[,"SalePrice"]) ) / 2   )
+
+> ##################################################
+> # AVERAGE MY RESULTS WITH CHOUDHARY MODEL RESULTS
+> ##################################################
+> 
+> choudhary <- read.csv("output.csv")
+
+> final_answer <- exp (   ( log(semi_final_answer) + log(choudhary$SalePrice) ) / 2   )
+
+> final_result <- data.frame( cbind( sorted_result$Id, final_answer ) )
+
+> names(final_result) <- c("Id", "SalePrice")
+
+> write.csv(final_result, file="kaggleSubmission7.csv", row.names=FALSE)
+
+> # Restore output to console
+> sink() 
