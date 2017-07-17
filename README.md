@@ -45,7 +45,7 @@ Leaderboard rank 30/2178, as of 2017-05-01 17:58 GMT
 1. Force macro variable (OFHEO WNC house price index) to be included (by using it to normalize the target variable before including it as a predictor, thus preventing algorithms from excluding it, as they might have if it were *only* a predictor).
 2. Use logarithms for continuous variables that can't go to zero (e.g. square feet of living space).
 3. Recode many-valued categorical variables as continuous by taking the coefficients from their dummies in an otherwise sparse OLS.
-4. Use arbitrary pseudocontinuous variables for ordered factors (at least as a first cut).
+4. ~Use arbitrary pseudocontinuous variables for ordered factors (at least as a first cut).~ Make ordered variables continuous by taking the coefficients from their dummies in an OLS (only using those dummy coefficients that turn out to be in the right order).
 
 Here's [my original plan](plan.md) FWIW.
 
