@@ -39,7 +39,9 @@ I haven't included output CSV files in this repository, since that would proabab
 | `house6.R` | Drop outliers and change SVM parameter | 0.116
 | `house7.R` | Average house6 result with Choudhary model | 0.112
 
-Leaderboard rank 30/2178, as of 2017-05-01 17:58 GMT
+Subsequently I took a weighted average of my output and the output from Xin-xing Chen_hust's ["have_a_try_2" Kaggle kernel](https://www.kaggle.com/cxxacxx/have-a-try-2) (which uses a combination of Lasso, XGBoost, and ElasticNet).  That script is written in Python, so could not be easily incorporated into my R code, so I just used Excel to take the weighted average (weight .8 for my house7 and .2 for have-a-try-2, just an offhand guess at reasonable weights).
+
+Leaderboard rank 15/1844, as of 2017-07-17 04:55 GMT
 
 ## Salient Features of My Approach
 1. Force macro variable (OFHEO WNC house price index) to be included (by using it to normalize the target variable before including it as a predictor, thus preventing algorithms from excluding it, as they might have if it were *only* a predictor).
